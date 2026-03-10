@@ -3,14 +3,17 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 
 <BorderPane fx:id="mainMenu" style="-fx-background-color: #1a1a2e;" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="gamehub.gamehub.MainMenuController">
     <top>
-        <VBox alignment="CENTER" style="-fx-padding: 30 0 20 0;" BorderPane.alignment="CENTER">
+        <VBox alignment="CENTER" prefWidth="884.0" style="-fx-padding: 30 0 20 0;" BorderPane.alignment="CENTER">
             <children>
                 <Label style="-fx-text-fill: white;" text="Choose Your Game">
                     <font>
@@ -21,115 +24,139 @@
         </VBox>
     </top>
     <center>
-        <HBox alignment="CENTER" BorderPane.alignment="CENTER">
+        <GridPane BorderPane.alignment="CENTER">
+            <columnConstraints>
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="25" />
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="25" />
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="25" />
+                <ColumnConstraints hgrow="ALWAYS" percentWidth="25" />
+            </columnConstraints>
             <children>
-                <VBox alignment="CENTER" onMouseClicked="#onTicTacToeClick" spacing="20.0" style="-fx-background-color: #778CA1;" HBox.hgrow="ALWAYS">
+                <VBox alignment="CENTER" onMouseClicked="#onTicTacToeClick" spacing="20.0" style="-fx-background-color: #778CA1;" GridPane.hgrow="ALWAYS" GridPane.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
                     <children>
                         <StackPane VBox.vgrow="ALWAYS">
-                     <children>
-                        <Label text="X|">
-                           <font>
-                              <Font size="100.0" />
-                           </font>
-                           <StackPane.margin>
-                              <Insets right="80.0" />
-                           </StackPane.margin>
-                        </Label>
-                        <Label text="O" textFill="#ff4c4c">
-                           <font>
-                              <Font size="100.0" />
-                           </font>
+                            <children>
+                                <Label text="X|">
+                                    <font>
+                                        <Font size="120.0" />
+                                    </font>
+                                    <StackPane.margin>
+                                        <Insets right="90.0" />
+                                    </StackPane.margin>
+                                </Label>
+                                <Label text="O" textFill="#ff4c4c">
+                                    <font>
+                                        <Font size="120.0" />
+                                    </font>
+                                    <padding>
+                                        <Insets left="90.0" />
+                                    </padding>
+                                </Label>
+                              <Label text="Tic-Tac-Toe" textFill="WHITE">
+                                  <font>
+                                      <Font name="System Bold" size="40.0" />
+                                  </font>
                            <padding>
-                              <Insets left="80.0" />
+                              <Insets top="200.0" />
                            </padding>
-                        </Label>
-                     </children>
+                              </Label>
+                            </children>
+                     <VBox.margin>
+                        <Insets top="-50.0" />
+                     </VBox.margin>
                         </StackPane>
-                  <Label text="Tic-Tac-Toe" textFill="WHITE" VBox.vgrow="ALWAYS">
-                     <font>
-                        <Font name="System Bold" size="40.0" />
-                     </font>
-                     <padding>
-                        <Insets bottom="50.0" />
-                     </padding>
-                  </Label>
                     </children>
                 </VBox>
-                <VBox alignment="CENTER" onMouseClicked="#onConnect4Click" spacing="20.0" style="-fx-background-color: #1a5276;" HBox.hgrow="ALWAYS">
+                <VBox alignment="CENTER" onMouseClicked="#onConnect4Click" spacing="20.0" style="-fx-background-color: #1a5276;" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" GridPane.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
                     <children>
                         <StackPane VBox.vgrow="ALWAYS">
-                     <children>
-                        <Label text="🔴" textFill="RED">
-                           <font>
-                              <Font size="100.0" />
-                           </font>
+                            <children>
+                                <Label text="🔴" textFill="RED">
+                                    <font>
+                                        <Font size="120.0" />
+                                    </font>
+                                    <StackPane.margin>
+                                        <Insets right="105.0" />
+                                    </StackPane.margin>
+                                </Label>
+                                <Label text="🔴" textFill="#eaff00">
+                                    <font>
+                                        <Font size="120.0" />
+                                    </font>
+                                    <StackPane.margin>
+                                        <Insets left="105.0" />
+                                    </StackPane.margin>
+                                </Label>
+                              <Label text="4-Gewinnt" textFill="WHITE">
+                                  <font>
+                                      <Font name="System Bold" size="40.0" />
+                                  </font>
+                                  <padding>
+                                      <Insets top="200.0" />
+                                  </padding>
                            <StackPane.margin>
-                              <Insets right="90.0" />
+                              <Insets />
                            </StackPane.margin>
-                        </Label>
-                        <Label text="🔴" textFill="#eaff00">
-                           <font>
-                              <Font size="100.0" />
-                           </font>
-                           <StackPane.margin>
-                              <Insets left="90.0" />
-                           </StackPane.margin>
-                        </Label>
-                     </children>
+                              </Label>
+                            </children>
+                     <VBox.margin>
+                        <Insets top="-50.0" />
+                     </VBox.margin>
                         </StackPane>
-                  <Label text="4-Gewinnt" textFill="WHITE">
-                     <font>
-                        <Font name="System Bold" size="40.0" />
-                     </font>
-                     <padding>
-                        <Insets bottom="50.0" />
-                     </padding>
-                  </Label>
                     </children>
                 </VBox>
-                <VBox alignment="CENTER" onMouseClicked="#onChessClick" spacing="20.0" style="-fx-background-color: #1e8449;" HBox.hgrow="ALWAYS">
+                <VBox alignment="CENTER" onMouseClicked="#onChessClick" spacing="20.0" style="-fx-background-color: #1e8449;" GridPane.columnIndex="2" GridPane.hgrow="ALWAYS" GridPane.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
                     <children>
                         <StackPane VBox.vgrow="ALWAYS">
-                     <children>
-                        <Label text="♟">
-                           <font>
-                              <Font size="100.0" />
-                           </font>
-                        </Label>
-                     </children>
+                            <children>
+                                <Label text="♟">
+                                    <font>
+                                        <Font size="120.0" />
+                                    </font>
+                                </Label>
+                              <Label text="Schach" textFill="WHITE">
+                                  <font>
+                                      <Font name="System Bold" size="40.0" />
+                                  </font>
+                                  <padding>
+                                      <Insets top="200.0" />
+                                  </padding>
+                              </Label>
+                            </children>
+                     <VBox.margin>
+                        <Insets top="-50.0" />
+                     </VBox.margin>
                         </StackPane>
-                  <Label text="Schach" textFill="WHITE">
-                     <font>
-                        <Font name="System Bold" size="40.0" />
-                     </font>
-                     <padding>
-                        <Insets bottom="50.0" />
-                     </padding>
-                  </Label>
                     </children>
                 </VBox>
-                <VBox alignment="CENTER" spacing="20.0" style="-fx-background-color: #1e6b1e;" HBox.hgrow="ALWAYS">
+                <VBox alignment="CENTER" spacing="20.0" style="-fx-background-color: #1e6b1e;" GridPane.columnIndex="3" GridPane.hgrow="ALWAYS" GridPane.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
                     <children>
                         <StackPane onMouseClicked="#onSnakeClick" VBox.vgrow="ALWAYS">
-                     <children>
-                        <Label text="🐍" textFill="#0015ff">
-                           <font>
-                              <Font size="100.0" />
-                           </font>
-                        </Label>
-                     </children>
+                            <children>
+                                <Label text="🐍" textFill="#0015ff">
+                                    <font>
+                                        <Font size="120.0" />
+                                    </font>
+                                </Label>
+                              <Label text="Snake" textFill="WHITE">
+                                  <font>
+                                      <Font name="System Bold" size="40.0" />
+                                  </font>
+                           <padding>
+                              <Insets top="200.0" />
+                           </padding>
+                              </Label>
+                            </children>
+                     <VBox.margin>
+                        <Insets top="-50.0" />
+                     </VBox.margin>
                         </StackPane>
-                  <Label text="Snake" textFill="WHITE">
-                     <font>
-                        <Font name="System Bold" size="40.0" />
-                     </font>
-                     <padding>
-                        <Insets bottom="50.0" />
-                     </padding>
-                  </Label>
                     </children>
                 </VBox>
             </children>
-        </HBox>
+         <rowConstraints>
+            <RowConstraints />
+         </rowConstraints>
+        </GridPane>
     </center>
 </BorderPane>

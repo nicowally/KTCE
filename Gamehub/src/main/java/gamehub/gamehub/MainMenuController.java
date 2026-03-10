@@ -15,7 +15,7 @@ public class MainMenuController {
     protected void onChessClick() {
         try {
             FXMLLoader loader = new FXMLLoader(
-                    GamehubApplication.class.getResource("chess.fxml")
+                    GamehubApplication.class.getResource("chess/chess.fxml")
             );
             mainMenu.getScene().setRoot(loader.load());
         } catch (IOException e) {

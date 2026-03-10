@@ -1,5 +1,6 @@
 package gamehub.gamehub;
 
+import gamehub.games.chess.figure;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
@@ -13,7 +14,12 @@ public class GamehubApplication extends Application {
         FXMLLoader fxmlLoader = new FXMLLoader(GamehubApplication.class.getResource("main-menu.fxml"));
         Scene scene = new Scene(fxmlLoader.load(), 1100, 600);
         stage.setTitle("GameHub");
+        stage.setMaximized(true);
+        stage.setResizable(false);
         stage.setScene(scene);
+
+        figure.preloadAll();
+
         stage.show();
     }
 }

@@ -6,14 +6,14 @@ import javafx.scene.image.ImageView;
 import java.util.HashMap;
 import java.util.Map;
 
-public class figure extends ImageView {
+public class Figure extends ImageView {
 
     public String type;
     public int col;
     public int row;
     private static final Map<String, Image> cache = new HashMap<>();
 
-    public figure(String type, int col, int row) {
+    public Figure(String type, int col, int row) {
         this.type = type;
         this.col = col;
         this.row = row;
@@ -26,7 +26,11 @@ public class figure extends ImageView {
     public static void preloadAll() {
         String[] types = {"wK","wQ","wB","wN","wR","wP","bK","bQ","bB","bN","bR","bP"};
         for (String type : types) {
-            cache.computeIfAbsent(type, t -> new Image(figure.class.getResourceAsStream("/gamehub/gamehub/chess/figure/" + t + ".png")));
+            cache.computeIfAbsent(type, t -> new Image(Figure.class.getResourceAsStream("/gamehub/gamehub/chess/figure/" + t + ".png")));
         }
+    }
+    public boolean canMoveTo(int targetCol, int targetRow, Board board) {
+        // unbekannte Figur darf sich nicht bewegen
+        return false;
     }
 }

@@ -1,6 +1,6 @@
 package gamehub.gamehub;
 
-import gamehub.games.chess.figure;
+import gamehub.games.chess.Figure;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
@@ -18,7 +18,7 @@ public class GamehubApplication extends Application {
         stage.setResizable(false);
         stage.setScene(scene);
 
-        figure.preloadAll();
+        Figure.preloadAll();
 
         stage.show();
     }

@@ -7,4 +7,5 @@ module gamehub.gamehub {
     opens gamehub.gamehub to javafx.fxml;
     opens gamehub.games.chess to javafx.fxml;
     exports gamehub.gamehub;
+    opens gamehub.games.chess.figures to javafx.fxml;
 }

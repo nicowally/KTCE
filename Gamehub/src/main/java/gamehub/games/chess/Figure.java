@@ -6,7 +6,7 @@ import javafx.scene.image.ImageView;
 import java.util.HashMap;
 import java.util.Map;
 
-public class Figure extends ImageView {
+public abstract class Figure extends ImageView {
 
     public String type;
     public int col;

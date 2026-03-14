@@ -1,6 +1,9 @@
-package gamehub.games.chess;
+package gamehub.games.chess.figures;
 
-public class Pawn extends Figure{
+import gamehub.games.chess.Board;
+import gamehub.games.chess.Figure;
+
+public class Pawn extends Figure {
 
     public Pawn(String colour, int col, int row) {
         super(colour + "P", col, row);

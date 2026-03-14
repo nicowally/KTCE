@@ -15,10 +15,15 @@ public class Board extends GridPane {
     private static final int COLS = 8;
     private static final int ROWS = 8;
     private Figure selectedFigure = null;
+    private boolean whiteTurn = true;
+    private ChessController controller;
 
     public Board() {
         setAlignment(javafx.geometry.Pos.CENTER);
         draw();
+    }
+    public void setController(ChessController controller) {
+        this.controller =controller;
     }
 
     public void draw() {
@@ -46,7 +51,7 @@ public class Board extends GridPane {
             add(label, 0, row);
         }
 
-        // Buchstaben unterhalb vom Broard
+        // Buchstaben unterhalb vom Board
         String[] letters = {"A", "B", "C", "D", "E", "F", "G", "H"};
         for (int col = 0; col < COLS; col++) {
             Label label = new Label(letters[col]);
@@ -61,12 +66,12 @@ public class Board extends GridPane {
     protected void placeFigure(Figure figure) {
         figure.setOnMouseClicked(event -> {
             handleClick(figure.col, figure.row);
-            event.consume(); // verhindert dass der Klick ans Feld weitergegeben wird
+            event.consume(); // verhindert das der Klick ans Feld weitergegeben wird
         });
         add(figure, figure.col+1, figure.row);
     }
 
-    protected Figure getFigureAt(int col, int row) {
+    public Figure getFigureAt(int col, int row) {
         return getChildren().stream()
                 .filter(node -> node instanceof Figure f && f.col == col && f.row == row)
                 .map(node -> (Figure) node)
@@ -75,11 +80,18 @@ public class Board extends GridPane {
     }
     private void handleClick(int col, int row) {
         Figure clickedFigure = getFigureAt(col, row);
-
+        String turncolour;
+        if(whiteTurn) {
+            turncolour = "w";
+        } else {
+            turncolour = "b";
+        }
         if (selectedFigure == null) {
             if (clickedFigure != null) {
-                selectedFigure = clickedFigure;
-                highlightSquare(selectedFigure.col, selectedFigure.row, true);
+                if(clickedFigure.type.startsWith(turncolour)){
+                    selectedFigure = clickedFigure;
+                    highlightSquare(selectedFigure.col, selectedFigure.row, true);
+                }
             }
         } else {
 
@@ -88,6 +100,9 @@ public class Board extends GridPane {
 
             if (selectedFigure.canMoveTo(col, row, this)) {
                 moveFigure(selectedFigure, col, row);
+                whiteTurn = !whiteTurn;
+                controller.updateTurnDisplay(whiteTurn);
+
             }
             highlightSquare(oldCol, oldRow, false);
             highlightSquare(col,row, false);
@@ -118,5 +133,22 @@ public class Board extends GridPane {
         figure.col = targetCol;
         figure.row = targetRow;
         add(figure, targetCol + 1, targetRow);
+    }
+
+    public boolean isPathClear(int startCol, int startRow, int targetCol, int targetRow) {
+        int diffCol = Integer.compare(targetCol, startCol); // Entweder -1, 0 oder 1
+        int diffRow = Integer.compare(targetRow, startRow); // Entweder -1, 0 oder 1
+
+        int currentCol = startCol + diffCol;
+        int currentRow = startRow + diffRow;
+
+        while (currentCol != targetCol || currentRow != targetRow) {
+            if (getFigureAt(currentCol, currentRow) != null) {
+                return false;
+            }
+            currentCol += diffCol;
+            currentRow += diffRow;
+        }
+        return true;
     }
 }

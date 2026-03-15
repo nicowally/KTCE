@@ -3,7 +3,10 @@ package gamehub.gamehub;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.layout.BorderPane;
-
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import java.util.Optional;
 import java.io.IOException;
 
 public class MainMenuController {
@@ -36,6 +39,27 @@ public class MainMenuController {
 
     @FXML
     protected void onSnakeClick() {
-        System.out.println("Snake");
+        ButtonType classicButton = new ButtonType("Classic");
+        ButtonType modernButton = new ButtonType("Modern");
+        ButtonType cancelButton = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Snake auswählen");
+        alert.setHeaderText("Welche Snake-Version möchtest du spielen?");
+        alert.setContentText("Wähle zwischen Classic und Modern.");
+
+        alert.getButtonTypes().setAll(classicButton, modernButton, cancelButton);
+
+        Optional<ButtonType> result = alert.showAndWait();
+
+        if (result.isPresent()) {
+            if (result.get() == classicButton) {
+                BorderPane snakePane = SnakeClassicWrapper.createSnakePane();
+                mainMenu.getScene().setRoot(snakePane);
+            } else if (result.get() == modernButton) {
+                BorderPane snakePane = SnakeModernWrapper.createSnakePane();
+                mainMenu.getScene().setRoot(snakePane);
+            }
+        }
     }
 }

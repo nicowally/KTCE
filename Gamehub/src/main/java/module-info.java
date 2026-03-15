@@ -1,6 +1,7 @@
 module gamehub.gamehub {
     requires javafx.controls;
     requires javafx.fxml;
+    requires javafx.swing;
     requires java.desktop;
 
 

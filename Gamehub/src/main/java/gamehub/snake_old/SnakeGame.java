@@ -7,75 +7,72 @@ import java.awt.event.*;
 import java.util.*;
 import java.util.List;
 
+/**
+ * Nokia 3310-style Snake – sieht exakt wie das Original aus:
+ *  - LCD-grüner Hintergrund (155/188/15)
+ *  - Dicker Pixel-Rahmen ums Spielfeld
+ *  - Score oben links in Monospace (wie Nokia-Display)
+ *  - Schlange = ausgefüllte schwarze Quadrate
+ *  - Futter  = kleiner Pixel-Sprite (wie Nokia)
+ *  - Kein Anti-Aliasing, reiner Pixel-Look
+ */
 public class SnakeGame extends JPanel implements ActionListener, KeyListener {
 
-    private static final int GRID_WIDTH = 24;
+    // ── Grid ──────────────────────────────────────────────────────────────────
+    private static final int GRID_WIDTH  = 21;   // Nokia 3310 hatte ~21×16 Zellen
     private static final int GRID_HEIGHT = 16;
-    private static final int GAME_SPEED = 120;
+    private static final int GAME_SPEED  = 150;  // ms pro Schritt (Nokia-Tempo)
 
-    private static final Color LCD_BG = new Color(155, 188, 15);
-    private static final Color LCD_DARK = new Color(35, 35, 35);
+    // ── Nokia-LCD-Farben ──────────────────────────────────────────────────────
+    private static final Color LCD_GREEN  = new Color(155, 188,  15);  // Hintergrund
+    private static final Color LCD_DARK   = new Color( 40,  40,  15);  // Pixel-Farbe
+    private static final Color LCD_MID    = new Color( 90, 120,  10);  // leicht heller (Rahmen-Schatten)
 
-    private final Timer timer;
-    private final List<Point> snake = new ArrayList<>();
-    private final Random random = new Random();
+    // ── Spielzustand ──────────────────────────────────────────────────────────
+    private final Timer          timer;
+    private final List<Point>    snake    = new ArrayList<>();
+    private final Random         random   = new Random();
 
-    private final Set<Point> walls = new HashSet<>();
-
-    private Point food;
-
-    private Direction direction = Direction.RIGHT;
+    private Point     food;
+    private Direction direction     = Direction.RIGHT;
     private Direction nextDirection = Direction.RIGHT;
 
-    private boolean running = true;
+    private boolean running  = true;
     private boolean gameOver = false;
-    private boolean paused = false;
+    private boolean paused   = false;
+    private int     score    = 0;
 
-    private int score = 0;
+    private enum Direction { UP, DOWN, LEFT, RIGHT }
 
-    // Verdauungsanimation
-    private int pendingGrowth = 0;
-    private int digestIndex = -1;
-
-    private enum Direction {
-        UP, DOWN, LEFT, RIGHT
-    }
-
+    // ── Konstruktor ───────────────────────────────────────────────────────────
     public SnakeGame() {
-        setPreferredSize(new Dimension(950, 720));
-        setBackground(LCD_BG);
+        setPreferredSize(new Dimension(480, 400));  // kompaktes Nokia-Display-Feeling
+        setBackground(LCD_GREEN);
         setFocusable(true);
         addKeyListener(this);
 
-        buildWalls(); // jetzt leer
         startGame();
 
         timer = new Timer(GAME_SPEED, this);
         timer.start();
     }
 
-    private void buildWalls() {
-        walls.clear(); // keine Wände
-    }
-
+    // ── Spielstart ────────────────────────────────────────────────────────────
     private void startGame() {
         snake.clear();
+        // Schlange startet mittig mit 4 Segmenten
+        int startY = GRID_HEIGHT / 2;
+        snake.add(new Point(8, startY));
+        snake.add(new Point(7, startY));
+        snake.add(new Point(6, startY));
+        snake.add(new Point(5, startY));
 
-        snake.add(new Point(10, 10));
-        snake.add(new Point(9, 10));
-        snake.add(new Point(8, 10));
-        snake.add(new Point(7, 10));
-
-        direction = Direction.RIGHT;
+        direction     = Direction.RIGHT;
         nextDirection = Direction.RIGHT;
-
-        running = true;
-        gameOver = false;
-        paused = false;
-        score = 0;
-
-        pendingGrowth = 0;
-        digestIndex = -1;
+        running       = true;
+        gameOver      = false;
+        paused        = false;
+        score         = 0;
 
         spawnFood();
         repaint();
@@ -85,388 +82,286 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         Point candidate;
         do {
             candidate = new Point(random.nextInt(GRID_WIDTH), random.nextInt(GRID_HEIGHT));
-        } while (snake.contains(candidate) || walls.contains(candidate));
-
+        } while (snake.contains(candidate));
         food = candidate;
     }
 
-    /**
-     * Berechnet die Kachelgröße so, dass sie immer ein Vielfaches von 6 ist.
-     * Dadurch liegen die Blöcke innerhalb und zwischen den Zellen nahtlos aneinander.
-     */
-    private int getTileSize() {
-        int availableWidth = getWidth() - 80;
-        int availableHeight = getHeight() - 140;
-        int rawTile = Math.max(12, Math.min(availableWidth / GRID_WIDTH, availableHeight / GRID_HEIGHT));
-        return (rawTile / 6) * 6;
+    // ── Kachelgröße: immer ganzzahlig, möglichst groß ────────────────────────
+    /** Berechnet die Kachelgröße passend zur aktuellen Panel-Größe. */
+    private int tileSize() {
+        int topBarHeight = 28;   // Platz für Score-Zeile
+        int padding      = 10;   // Abstand an allen Seiten
+        int availW = getWidth()  - padding * 2;
+        int availH = getHeight() - topBarHeight - padding * 2;
+        return Math.max(4, Math.min(availW / GRID_WIDTH, availH / GRID_HEIGHT));
     }
 
-    private int getBoardWidth() {
-        return GRID_WIDTH * getTileSize();
+    private int boardW()  { return GRID_WIDTH  * tileSize(); }
+    private int boardH()  { return GRID_HEIGHT * tileSize(); }
+    private int boardX()  { return (getWidth() - boardW()) / 2; }
+    private int boardY()  {
+        // Score-Zeile + kleiner Abstand
+        return 30;
     }
 
-    private int getBoardHeight() {
-        return GRID_HEIGHT * getTileSize();
-    }
-
-    private int getBoardX() {
-        return (getWidth() - getBoardWidth()) / 2;
-    }
-
-    private int getBoardY() {
-        return 90;
-    }
-
+    // ── Game-Loop ─────────────────────────────────────────────────────────────
     @Override
     public void actionPerformed(ActionEvent e) {
-        if (running && !paused) {
-            updateGame();
-        }
+        if (running && !paused) updateGame();
         repaint();
     }
 
     private void updateGame() {
-        if (isOpposite(direction, nextDirection)) {
-            nextDirection = direction;
-        }
-        direction = nextDirection;
+        // Richtungswechsel (kein 180°-Turn)
+        if (!isOpposite(direction, nextDirection)) direction = nextDirection;
 
-        Point head = snake.get(0);
+        Point head    = snake.get(0);
         Point newHead = new Point(head);
 
         switch (direction) {
-            case UP -> newHead.y--;
-            case DOWN -> newHead.y++;
-            case LEFT -> newHead.x--;
+            case UP    -> newHead.y--;
+            case DOWN  -> newHead.y++;
+            case LEFT  -> newHead.x--;
             case RIGHT -> newHead.x++;
         }
 
-        if (newHead.x < 0 || newHead.x >= GRID_WIDTH || newHead.y < 0 || newHead.y >= GRID_HEIGHT) {
-            running = false;
-            gameOver = true;
-            return;
+        // Wand-Kollision
+        if (newHead.x < 0 || newHead.x >= GRID_WIDTH ||
+                newHead.y < 0 || newHead.y >= GRID_HEIGHT) {
+            running = false; gameOver = true; return;
         }
 
-        if (walls.contains(newHead)) {
-            running = false;
-            gameOver = true;
-            return;
-        }
-
+        // Selbst-Kollision (nicht gegen letztes Segment, das gleich wegfällt)
         boolean ateFood = newHead.equals(food);
+        int limit = ateFood ? snake.size() : snake.size() - 1;
+        for (int i = 1; i < limit; i++) {
+            if (snake.get(i).equals(newHead)) {
+                running = false; gameOver = true; return;
+            }
+        }
 
         snake.add(0, newHead);
-
-        int collisionLimit = ateFood ? snake.size() : snake.size() - 1;
-        for (int i = 1; i < collisionLimit; i++) {
-            if (snake.get(i).equals(newHead)) {
-                running = false;
-                gameOver = true;
-                return;
-            }
-        }
-
-        boolean growAtTailThisTick = false;
-
-        if (pendingGrowth > 0) {
-            if (digestIndex < 0) {
-                digestIndex = 1;
-            } else {
-                digestIndex++;
-            }
-
-            if (digestIndex >= snake.size() - 1) {
-                growAtTailThisTick = true;
-                pendingGrowth--;
-                digestIndex = pendingGrowth > 0 ? 1 : -1;
-            }
-        }
-
         if (ateFood) {
             score++;
-            pendingGrowth++;
-            if (digestIndex < 0) {
-                digestIndex = 1;
-            }
             spawnFood();
-        }
-
-        if (!growAtTailThisTick) {
+        } else {
             snake.remove(snake.size() - 1);
         }
     }
 
-    private boolean isOpposite(Direction current, Direction next) {
-        return (current == Direction.UP && next == Direction.DOWN)
-                || (current == Direction.DOWN && next == Direction.UP)
-                || (current == Direction.LEFT && next == Direction.RIGHT)
-                || (current == Direction.RIGHT && next == Direction.LEFT);
+    private boolean isOpposite(Direction a, Direction b) {
+        return (a == Direction.UP    && b == Direction.DOWN)
+                || (a == Direction.DOWN  && b == Direction.UP)
+                || (a == Direction.LEFT  && b == Direction.RIGHT)
+                || (a == Direction.RIGHT && b == Direction.LEFT);
     }
 
+    // ── Rendering ─────────────────────────────────────────────────────────────
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        Graphics2D g2 = (Graphics2D) g.create();
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-
-        drawPhoneScreen(g2);
-        drawTopBar(g2);
-        drawBoardFrame(g2);
-        drawWalls(g2);   // zeichnet nichts, da walls leer
-        drawSnake(g2);
-        drawFood(g2);
-
-        if (paused && !gameOver) {
-            drawCenterMessage(g2, "PAUSE", "SPACE");
-        }
-
-        if (gameOver) {
-            drawCenterMessage(g2, "GAME OVER", "R = RESTART");
-        }
-
-        g2.dispose();
-    }
-
-    private void drawPhoneScreen(Graphics2D g) {
-        g.setColor(LCD_BG);
+        // LCD-Hintergrund
+        g.setColor(LCD_GREEN);
         g.fillRect(0, 0, getWidth(), getHeight());
+
+        Graphics2D g2 = (Graphics2D) g;
+        // Kein Anti-Aliasing → echter Pixel-Look
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,    RenderingHints.VALUE_ANTIALIAS_OFF);
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+
+        drawScoreBar(g2);
+        drawBorder(g2);
+        drawFood(g2);
+        drawSnake(g2);
+
+        if (paused   && !gameOver) drawOverlay(g2, "PAUSED",    "SPACE = WEITER");
+        if (gameOver)              drawOverlay(g2, "GAME OVER", "R = NEU STARTEN");
     }
 
-    private void drawTopBar(Graphics2D g) {
+    /** Score-Anzeige: Nokia-typisch oben links, Monospace-Font */
+    private void drawScoreBar(Graphics2D g) {
         g.setColor(LCD_DARK);
-        g.setFont(new Font("Monospaced", Font.BOLD, 26));
-
-        g.drawString(String.format("%04d", score * 7 + 491), 35, 45);
-
-        drawMiniSnakeIcon(g, getWidth() - 150, 28, 8);
-
-        g.drawString(String.format("%02d", score), getWidth() - 80, 45);
-
-        g.drawLine(25, 60, getWidth() - 25, 60);
+        g.setFont(new Font("Monospaced", Font.BOLD, 16));
+        // Nokia zeigte den Score immer ohne Beschriftung, nur die Zahl
+        String scoreStr = String.format("%04d", score);
+        g.drawString(scoreStr, boardX(), 20);
     }
 
-    private void drawMiniSnakeIcon(Graphics2D g, int x, int y, int pixel) {
-        int[][] icon = {
-                {1, 0}, {2, 0},
-                {0, 1}, {1, 1}, {2, 1}, {3, 1},
-                {1, 2}, {2, 2},
-                {2, 3}
-        };
+    /** Dicker Pixel-Rahmen ums Spielfeld – exakt wie Nokia 3310 */
+    private void drawBorder(Graphics2D g) {
+        int x = boardX();
+        int y = boardY();
+        int w = boardW();
+        int h = boardH();
 
-        for (int[] p : icon) {
-            g.fillRect(x + p[0] * pixel, y + p[1] * pixel, pixel, pixel);
+        // Äußerer Rahmen (2px dick)
+        g.setColor(LCD_DARK);
+        for (int t = 0; t < 2; t++) {
+            g.drawRect(x - t, y - t, w + t * 2, h + t * 2);
         }
+        // Innerer Schatten (1px, etwas heller)
+        g.setColor(LCD_MID);
+        g.drawRect(x + 1, y + 1, w - 2, h - 2);
     }
 
-    private void drawBoardFrame(Graphics2D g) {
-        int x = getBoardX();
-        int y = getBoardY();
-        int w = getBoardWidth();
-        int h = getBoardHeight();
-
-        g.setColor(LCD_DARK);
-        g.drawRect(x, y, w, h);
-        g.drawRect(x + 3, y + 3, w - 6, h - 6);
-    }
-
-    private void drawWalls(Graphics2D g) {
-        // keine Wände
-    }
-
+    /**
+     * Nokia 3310-Schlange: jedes Segment ist ein kleines ausgefülltes Quadrat,
+     * das zentriert in seiner Zelle sitzt (~60 % der Tile-Größe).
+     * Der Kopf ist etwas größer (~80 %) und hat zwei Augen-Pixel.
+     */
     private void drawSnake(Graphics2D g) {
-        int tile = getTileSize();
-        int boardX = getBoardX();
-        int boardY = getBoardY();
+        int t  = tileSize();
+        int bx = boardX();
+        int by = boardY();
+
+        // Körper-Segmente: 60 % der Tile, zentriert
+        int bodySize   = Math.max(2, (t * 6) / 10);
+        int bodyOffset = (t - bodySize) / 2;
 
         g.setColor(LCD_DARK);
 
-        for (int i = 0; i < snake.size(); i++) {
-            Point current = snake.get(i);
-            Point prev = (i > 0) ? snake.get(i - 1) : null;
-            Point next = (i < snake.size() - 1) ? snake.get(i + 1) : null;
+        for (int i = snake.size() - 1; i >= 0; i--) {
+            Point p = snake.get(i);
+            int px = bx + p.x * t;
+            int py = by + p.y * t;
 
-            boolean fat = (i == digestIndex);
+            if (i == 0) {
+                // Kopf: ~80 % der Tile, zentriert
+                int headSize   = Math.max(3, (t * 8) / 10);
+                int headOffset = (t - headSize) / 2;
+                g.fillRect(px + headOffset, py + headOffset, headSize, headSize);
 
-            drawSnakePiece(
-                    g,
-                    boardX + current.x * tile,
-                    boardY + current.y * tile,
-                    tile,
-                    prev,
-                    current,
-                    next,
-                    fat,
-                    i
-            );
+                // Augen: 2 kleine Pixel-Dots, je nach Richtung positioniert
+                int eyeSize = Math.max(1, t / 8);
+                drawHeadEyes(g, px, py, t, eyeSize);
+            } else {
+                g.fillRect(px + bodyOffset, py + bodyOffset, bodySize, bodySize);
+            }
         }
     }
 
     /**
-     * Zeichnet ein Segment der Schlange mit drei Blöcken in einer Linie.
-     * Die Linie wechselt je nach Index zwischen oben (Reihe 1) und unten (Reihe 2),
-     * sodass das Muster ---___---___--- entsteht – jetzt ohne freie Zeile dazwischen.
+     * Zeichnet zwei Augen-Pixel auf den Kopf, ausgerichtet nach der Bewegungsrichtung.
      */
-    private void drawSnakePiece(Graphics2D g, int x, int y, int size,
-                                Point prev, Point current, Point next, boolean fat, int index) {
-        int block = size / 6;
+    private void drawHeadEyes(Graphics2D g, int px, int py, int t, int es) {
+        int mid  = t / 2;
+        int near = t / 5;          // Abstand von der Vorderkante
+        int side = t / 3;          // seitlicher Abstand zur Mitte
 
-        // Bestimme die Art des Segments
-        boolean horizontal = false;
-        boolean vertical = false;
-        boolean diagonal = false;
-
-        if (prev != null && next != null) {
-            if (prev.y == current.y && next.y == current.y) {
-                horizontal = true;
-            } else if (prev.x == current.x && next.x == current.x) {
-                vertical = true;
-            } else {
-                diagonal = true;
-            }
-        } else if (prev != null) {
-            if (prev.y == current.y) horizontal = true;
-            else if (prev.x == current.x) vertical = true;
-            else diagonal = true;
-        } else if (next != null) {
-            if (next.y == current.y) horizontal = true;
-            else if (next.x == current.x) vertical = true;
-            else diagonal = true;
-        } else {
-            g.fillRect(x + 2 * block, y + 2 * block, block, block);
-            return;
+        int e1x, e1y, e2x, e2y;
+        switch (direction) {
+            case RIGHT -> { e1x = px + t - near - es; e1y = py + mid - side;     e2x = e1x;         e2y = py + mid + side - es; }
+            case LEFT  -> { e1x = px + near;           e1y = py + mid - side;     e2x = e1x;         e2y = py + mid + side - es; }
+            case UP    -> { e1x = px + mid - side;     e1y = py + near;           e2x = px + mid + side - es; e2y = e1y; }
+            default    -> { e1x = px + mid - side;     e1y = py + t - near - es;  e2x = px + mid + side - es; e2y = e1y; }
         }
 
-        boolean even = (index % 2 == 0);
-
-        if (horizontal) {
-            int row = even ? 1 : 2; // jetzt direkt benachbart
-            fillPixel(g, x, y, block, 1, row);
-            fillPixel(g, x, y, block, 2, row);
-            fillPixel(g, x, y, block, 3, row);
-            if (fat) {
-                fillPixel(g, x, y, block, 2, 2); // Mitte
-            }
-        } else if (vertical) {
-            int col = even ? 1 : 2;
-            fillPixel(g, x, y, block, col, 1);
-            fillPixel(g, x, y, block, col, 2);
-            fillPixel(g, x, y, block, col, 3);
-            if (fat) {
-                fillPixel(g, x, y, block, 2, 2);
-            }
-        } else if (diagonal) {
-            if (even) {
-                fillPixel(g, x, y, block, 1, 1);
-                fillPixel(g, x, y, block, 2, 2);
-                fillPixel(g, x, y, block, 3, 3);
-            } else {
-                fillPixel(g, x, y, block, 3, 1);
-                fillPixel(g, x, y, block, 2, 2);
-                fillPixel(g, x, y, block, 1, 3);
-            }
-            if (fat) {
-                fillPixel(g, x, y, block, 2, 2);
-            }
-        }
+        // Augen werden in LCD_GREEN gezeichnet (heller Kontrast auf dunklem Kopf)
+        g.setColor(LCD_GREEN);
+        g.fillRect(e1x, e1y, es, es);
+        g.fillRect(e2x, e2y, es, es);
+        g.setColor(LCD_DARK);
     }
 
+    /**
+     * Futter-Sprite im Nokia-Stil:
+     * Bei kleinen Tiles: einfacher Punkt.
+     * Bei größeren Tiles: der klassische kleine "Apfel"-Pixel-Sprite.
+     */
     private void drawFood(Graphics2D g) {
-        int tile = getTileSize();
-        int boardX = getBoardX();
-        int boardY = getBoardY();
+        int t  = tileSize();
+        int bx = boardX();
+        int by = boardY();
+        int fx = bx + food.x * t;
+        int fy = by + food.y * t;
 
         g.setColor(LCD_DARK);
-        drawFoodSprite(g, boardX + food.x * tile, boardY + food.y * tile, tile);
-    }
 
-    /**
-     * Futter-Sprite im ursprünglichen Stil (wie zu Beginn).
-     */
-    private void drawFoodSprite(Graphics2D g, int x, int y, int size) {
-        int block = size / 6;
-
-        int[][] sprite = {
-                {2, 0},
-                {1, 1}, {2, 1}, {3, 1},
-                {0, 2}, {1, 2}, {2, 2}, {3, 2},
-                {1, 3}, {2, 3}
-        };
-
-        for (int[] p : sprite) {
-            g.fillRect(x + p[0] * block + block, y + p[1] * block + block, block, block);
+        if (t <= 8) {
+            // Sehr kleine Tiles: nur ein Pixel-Punkt
+            int b = Math.max(2, t / 2);
+            g.fillRect(fx + t / 2 - b / 2, fy + t / 2 - b / 2, b, b);
+        } else {
+            // Nokia-typischer Futter-Sprite (Äpfelchen):
+            // Pixel-Koordinaten relativ zum 6×6-Raster innerhalb der Tile
+            int b = t / 6;  // Block-Einheit
+            // Stiel
+            g.fillRect(fx + 3 * b, fy + 0 * b, b, b);
+            // Blatt
+            g.fillRect(fx + 4 * b, fy + 0 * b, b, b);
+            // Apfelkörper
+            g.fillRect(fx + 2 * b, fy + 1 * b, b, b);
+            g.fillRect(fx + 3 * b, fy + 1 * b, b, b);
+            g.fillRect(fx + 4 * b, fy + 1 * b, b, b);
+            g.fillRect(fx + 1 * b, fy + 2 * b, b, b);
+            g.fillRect(fx + 2 * b, fy + 2 * b, b, b);
+            g.fillRect(fx + 3 * b, fy + 2 * b, b, b);
+            g.fillRect(fx + 4 * b, fy + 2 * b, b, b);
+            g.fillRect(fx + 2 * b, fy + 3 * b, b, b);
+            g.fillRect(fx + 3 * b, fy + 3 * b, b, b);
         }
     }
 
-    private void fillPixel(Graphics2D g, int x, int y, int block, int px, int py) {
-        g.fillRect(x + px * block, y + py * block, block, block);
-    }
+    /** Pause / Game-Over Overlay im Nokia-Stil */
+    private void drawOverlay(Graphics2D g, String title, String subtitle) {
+        int bx = boardX();
+        int by = boardY();
+        int bw = boardW();
+        int bh = boardH();
 
-    private void drawCenterMessage(Graphics2D g, String title, String subtitle) {
-        int boardX = getBoardX();
-        int boardY = getBoardY();
-        int boardW = getBoardWidth();
-        int boardH = getBoardHeight();
+        // Box zentriert im Spielfeld
+        int boxW = Math.min(200, bw - 20);
+        int boxH = 60;
+        int boxX = bx + (bw - boxW) / 2;
+        int boxY = by + (bh - boxH) / 2;
 
-        int boxW = Math.min(280, boardW - 30);
-        int boxH = 90;
-        int boxX = boardX + (boardW - boxW) / 2;
-        int boxY = boardY + (boardH - boxH) / 2;
-
-        g.setColor(LCD_BG);
+        // LCD-Hintergrund der Box (wirkt wie "ausgebleicht")
+        g.setColor(LCD_GREEN);
         g.fillRect(boxX, boxY, boxW, boxH);
 
+        // Rahmen
         g.setColor(LCD_DARK);
-        g.drawRect(boxX, boxY, boxW, boxH);
+        g.drawRect(boxX,     boxY,     boxW,     boxH);
+        g.drawRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
 
-        g.setFont(new Font("Monospaced", Font.BOLD, 22));
-        FontMetrics fm1 = g.getFontMetrics();
-        g.drawString(title, boxX + (boxW - fm1.stringWidth(title)) / 2, boxY + 32);
+        // Text
+        g.setFont(new Font("Monospaced", Font.BOLD, 14));
+        FontMetrics fm = g.getFontMetrics();
+        g.drawString(title,    boxX + (boxW - fm.stringWidth(title))    / 2, boxY + 22);
 
-        g.setFont(new Font("Monospaced", Font.PLAIN, 16));
-        FontMetrics fm2 = g.getFontMetrics();
-        g.drawString(subtitle, boxX + (boxW - fm2.stringWidth(subtitle)) / 2, boxY + 60);
+        g.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        fm = g.getFontMetrics();
+        g.drawString(subtitle, boxX + (boxW - fm.stringWidth(subtitle)) / 2, boxY + 44);
     }
 
+    // ── Input ──────────────────────────────────────────────────────────────────
     @Override
     public void keyPressed(KeyEvent e) {
-        int key = e.getKeyCode();
-
-        switch (key) {
-            case KeyEvent.VK_UP, KeyEvent.VK_W -> {
-                if (direction != Direction.DOWN) nextDirection = Direction.UP;
-            }
-            case KeyEvent.VK_DOWN, KeyEvent.VK_S -> {
-                if (direction != Direction.UP) nextDirection = Direction.DOWN;
-            }
-            case KeyEvent.VK_LEFT, KeyEvent.VK_A -> {
-                if (direction != Direction.RIGHT) nextDirection = Direction.LEFT;
-            }
-            case KeyEvent.VK_RIGHT, KeyEvent.VK_D -> {
-                if (direction != Direction.LEFT) nextDirection = Direction.RIGHT;
-            }
-            case KeyEvent.VK_SPACE -> {
-                if (!gameOver) paused = !paused;
-            }
-            case KeyEvent.VK_R -> startGame();
+        switch (e.getKeyCode()) {
+            case KeyEvent.VK_UP,    KeyEvent.VK_W -> { if (direction != Direction.DOWN)  nextDirection = Direction.UP;    }
+            case KeyEvent.VK_DOWN,  KeyEvent.VK_S -> { if (direction != Direction.UP)    nextDirection = Direction.DOWN;  }
+            case KeyEvent.VK_LEFT,  KeyEvent.VK_A -> { if (direction != Direction.RIGHT) nextDirection = Direction.LEFT;  }
+            case KeyEvent.VK_RIGHT, KeyEvent.VK_D -> { if (direction != Direction.LEFT)  nextDirection = Direction.RIGHT; }
+            case KeyEvent.VK_SPACE -> { if (!gameOver) paused = !paused; }
+            case KeyEvent.VK_R     -> startGame();
         }
     }
 
     @Override public void keyReleased(KeyEvent e) {}
-    @Override public void keyTyped(KeyEvent e) {}
+    @Override public void keyTyped(KeyEvent e)    {}
 
+    // ── Main ──────────────────────────────────────────────────────────────────
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("Snake Classic");
+            JFrame frame = new JFrame("Snake – Nokia Classic");
             SnakeGame game = new SnakeGame();
-
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setResizable(true);
             frame.add(game);
             frame.pack();
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
-
             game.requestFocusInWindow();
         });
     }

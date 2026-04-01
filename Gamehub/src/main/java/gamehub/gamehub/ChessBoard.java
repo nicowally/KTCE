@@ -1,5 +1,6 @@
-package gamehub.games.chess;
+package gamehub.gamehub;
 
+import gamehub.chess.Figure;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
@@ -9,7 +10,7 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
-public class Board extends GridPane {
+public class ChessBoard extends GridPane {
 
     public static final int SQUARE_SIZE = 90;
     private static final int COLS = 8;
@@ -18,7 +19,7 @@ public class Board extends GridPane {
     private boolean whiteTurn = true;
     private ChessController controller;
 
-    public Board() {
+    public ChessBoard() {
         setAlignment(javafx.geometry.Pos.CENTER);
         draw();
     }

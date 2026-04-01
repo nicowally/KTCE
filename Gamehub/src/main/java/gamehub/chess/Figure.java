@@ -1,5 +1,6 @@
-package gamehub.games.chess;
+package gamehub.chess;
 
+import gamehub.gamehub.ChessBoard;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 
@@ -19,8 +20,8 @@ public abstract class Figure extends ImageView {
         this.row = row;
 
         setImage(cache.computeIfAbsent(type, t -> new Image(getClass().getResourceAsStream("/gamehub/gamehub/chess/figure/" + t + ".png"))));
-        setFitWidth(Board.SQUARE_SIZE);
-        setFitHeight(Board.SQUARE_SIZE);
+        setFitWidth(ChessBoard.SQUARE_SIZE);
+        setFitHeight(ChessBoard.SQUARE_SIZE);
     }
 
     public static void preloadAll() {
@@ -29,7 +30,7 @@ public abstract class Figure extends ImageView {
             cache.computeIfAbsent(type, t -> new Image(Figure.class.getResourceAsStream("/gamehub/gamehub/chess/figure/" + t + ".png")));
         }
     }
-    public boolean canMoveTo(int targetCol, int targetRow, Board board) {
+    public boolean canMoveTo(int targetCol, int targetRow, ChessBoard chessBoard) {
         // unbekannte Figur darf sich nicht bewegen
         return false;
     }

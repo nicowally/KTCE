@@ -1,7 +1,7 @@
-package gamehub.games.chess.figures;
+package gamehub.chess.figures;
 
-import gamehub.games.chess.Board;
-import gamehub.games.chess.Figure;
+import gamehub.gamehub.ChessBoard;
+import gamehub.chess.Figure;
 
 public class Pawn extends Figure {
 
@@ -10,7 +10,7 @@ public class Pawn extends Figure {
     }
 
     @Override
-    public boolean canMoveTo(int targetCol, int targetRow, Board board) {
+    public boolean canMoveTo(int targetCol, int targetRow, ChessBoard chessBoard) {
         int direction;
         int startRow;
 
@@ -23,20 +23,20 @@ public class Pawn extends Figure {
         }
         // 1 Feld nach vorne
         if(targetCol == col && targetRow == row+direction) {
-            if(board.getFigureAt(targetCol, targetRow) == null){
+            if(chessBoard.getFigureAt(targetCol, targetRow) == null){
                 return true;
             }
         }
         // Am Anfang 2 Felder nach vorne
         if (targetCol == col && targetRow == row + 2*direction && row == startRow) {
-            if (board.getFigureAt(targetCol, targetRow) == null && board.getFigureAt(targetCol, row + direction) == null) {
+            if (chessBoard.getFigureAt(targetCol, targetRow) == null && chessBoard.getFigureAt(targetCol, row + direction) == null) {
                 return true;
             }
         }
 
         // Schlagen diagonal
         if (Math.abs(targetCol - col) == 1 && targetRow == row + direction) {
-            Figure target = board.getFigureAt(targetCol, targetRow);
+            Figure target = chessBoard.getFigureAt(targetCol, targetRow);
             if (target != null && !target.type.startsWith(type.substring(0, 1))) {
                 return true;
             }

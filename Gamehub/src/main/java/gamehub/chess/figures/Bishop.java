@@ -1,7 +1,7 @@
-package gamehub.games.chess.figures;
+package gamehub.chess.figures;
 
-import gamehub.games.chess.Board;
-import gamehub.games.chess.Figure;
+import gamehub.gamehub.ChessBoard;
+import gamehub.chess.Figure;
 
 public class Bishop extends Figure {
 
@@ -10,7 +10,7 @@ public class Bishop extends Figure {
     }
 
     @Override
-    public boolean canMoveTo(int targetCol, int targetRow, Board board) {
+    public boolean canMoveTo(int targetCol, int targetRow, ChessBoard chessBoard) {
         int diffCol = Math.abs(targetCol - col);
         int diffRow = Math.abs(targetRow - row);
 
@@ -18,10 +18,10 @@ public class Bishop extends Figure {
         if (diffCol != diffRow) {
             return false;
         }
-        if(!board.isPathClear(col,row,targetCol,targetRow)) {
+        if(!chessBoard.isPathClear(col,row,targetCol,targetRow)) {
             return false;
         }
-        Figure target = board.getFigureAt(targetCol, targetRow);
+        Figure target = chessBoard.getFigureAt(targetCol, targetRow);
         if (target != null && target.type.startsWith(this.type.substring(0,1))) {
             return false;
         }

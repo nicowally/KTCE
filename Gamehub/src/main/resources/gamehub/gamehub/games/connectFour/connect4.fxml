@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.HBox?>
+
+<BorderPane maxHeight="Infinity" maxWidth="Infinity" style="-fx-background-color: #1a1a2e;"
+            xmlns="http://javafx.com/javafx/25"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="gamehub.games.connectFour.Connect4Controller">
+
+    <top>
+        <VBox alignment="CENTER_LEFT" maxWidth="Infinity" style="-fx-padding: 15;">
+            <children>
+                <Button mnemonicParsing="false" onAction="#onBackClick" text="Zurück" />
+            </children>
+        </VBox>
+    </top>
+
+    <center>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                    style="-fx-background-color: transparent; -fx-background: transparent;">
+            <content>
+                <VBox alignment="CENTER" spacing="16.0">
+                    <padding><Insets top="20" bottom="40" left="40" right="40" /></padding>
+
+                    <!-- Status label -->
+                    <Label fx:id="statusLabel"
+                           text="🔴  Rot ist dran"
+                           style="-fx-text-fill: #e74c3c; -fx-font-size: 28px; -fx-font-weight: bold;" />
+
+                    <!-- Drop buttons -->
+                    <HBox alignment="CENTER" spacing="0">
+                        <children>
+                            <Button fx:id="col0" onAction="#onColumnClick" text="▼"
+                                    minWidth="80" prefWidth="80"
+                                    style="-fx-font-size: 16px; -fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-cursor: hand;" />
+                            <Button fx:id="col1" onAction="#onColumnClick" text="▼"
+                                    minWidth="80" prefWidth="80"
+                                    style="-fx-font-size: 16px; -fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-cursor: hand;" />
+                            <Button fx:id="col2" onAction="#onColumnClick" text="▼"
+                                    minWidth="80" prefWidth="80"
+                                    style="-fx-font-size: 16px; -fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-cursor: hand;" />
+                            <Button fx:id="col3" onAction="#onColumnClick" text="▼"
+                                    minWidth="80" prefWidth="80"
+                                    style="-fx-font-size: 16px; -fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-cursor: hand;" />
+                            <Button fx:id="col4" onAction="#onColumnClick" text="▼"
+                                    minWidth="80" prefWidth="80"
+                                    style="-fx-font-size: 16px; -fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-cursor: hand;" />
+                            <Button fx:id="col5" onAction="#onColumnClick" text="▼"
+                                    minWidth="80" prefWidth="80"
+                                    style="-fx-font-size: 16px; -fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-cursor: hand;" />
+                            <Button fx:id="col6" onAction="#onColumnClick" text="▼"
+                                    minWidth="80" prefWidth="80"
+                                    style="-fx-font-size: 16px; -fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-cursor: hand;" />
+                        </children>
+                    </HBox>
+
+                    <!-- Game board -->
+                    <GridPane fx:id="boardGrid"
+                              hgap="0" vgap="0"
+                              alignment="CENTER"
+                              style="-fx-background-color: #1a5276; -fx-padding: 8; -fx-background-radius: 10;">
+                        <columnConstraints>
+                            <ColumnConstraints minWidth="80" prefWidth="80" />
+                            <ColumnConstraints minWidth="80" prefWidth="80" />
+                            <ColumnConstraints minWidth="80" prefWidth="80" />
+                            <ColumnConstraints minWidth="80" prefWidth="80" />
+                            <ColumnConstraints minWidth="80" prefWidth="80" />
+                            <ColumnConstraints minWidth="80" prefWidth="80" />
+                            <ColumnConstraints minWidth="80" prefWidth="80" />
+                        </columnConstraints>
+                        <rowConstraints>
+                            <RowConstraints minHeight="80" prefHeight="80" />
+                            <RowConstraints minHeight="80" prefHeight="80" />
+                            <RowConstraints minHeight="80" prefHeight="80" />
+                            <RowConstraints minHeight="80" prefHeight="80" />
+                            <RowConstraints minHeight="80" prefHeight="80" />
+                            <RowConstraints minHeight="80" prefHeight="80" />
+                        </rowConstraints>
+                        <!-- Cells are added programmatically in the controller -->
+                    </GridPane>
+
+                    <!-- Restart button -->
+                    <Button mnemonicParsing="false" onAction="#onRestartClick" text="Neu starten"
+                            style="-fx-font-size: 18px; -fx-padding: 10 30;" />
+
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+
+</BorderPane>

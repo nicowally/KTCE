@@ -11,4 +11,5 @@ module gamehub.gamehub {
     opens gamehub.games.chess.figures to javafx.fxml;
     opens gamehub.games.ticTacToe to javafx.fxml;
     opens gamehub.games.connectFour to javafx.fxml;
+    exports gamehub.games.chess;
 }

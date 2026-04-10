@@ -1,7 +1,7 @@
-package gamehub.chess.figures;
+package gamehub.games.chess.figures;
 
-import gamehub.gamehub.ChessBoard;
-import gamehub.chess.Figure;
+import gamehub.games.chess.ChessBoard;
+import gamehub.games.chess.Figure;
 
 public class King extends Figure {
     public King(String colour, int col, int row) {

@@ -1,7 +1,7 @@
 package gamehub.games.chess;
 
-import gamehub.gamehub.GamehubApplication;
 import gamehub.games.chess.figures.*;
+import gamehub.gamehub.GamehubApplication;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Label;

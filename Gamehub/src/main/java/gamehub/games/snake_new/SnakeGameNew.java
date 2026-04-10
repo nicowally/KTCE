@@ -1,4 +1,4 @@
-package gamehub.snake_new;
+package gamehub.games.snake_new;
 
 import javax.swing.*;
 import java.awt.*;

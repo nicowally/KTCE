@@ -1,4 +1,4 @@
-package gamehub.snake_old;
+package gamehub.games.snake_old;
 
 import javax.swing.*;
 import javax.swing.Timer;

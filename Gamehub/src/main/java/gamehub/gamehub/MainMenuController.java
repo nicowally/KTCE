@@ -28,13 +28,26 @@ public class MainMenuController {
 
     @FXML
     protected void onConnect4Click() {
-        System.out.println("connect4");
+        try {
+            FXMLLoader loader = new FXMLLoader(
+                    GamehubApplication.class.getResource("/gamehub/gamehub/games/connectFour/connect4.fxml")
+            );
+            mainMenu.getScene().setRoot(loader.load());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @FXML
     protected void onTicTacToeClick() {
-        System.out.println("TicTacToe");
-
+        try {
+            FXMLLoader loader = new FXMLLoader(
+                    GamehubApplication.class.getResource("/gamehub/gamehub/games/ticTacToe/game.fxml")
+            );
+            mainMenu.getScene().setRoot(loader.load());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     @FXML

@@ -18,7 +18,7 @@ public abstract class Figure extends ImageView {
         this.col = col;
         this.row = row;
 
-        setImage(cache.computeIfAbsent(type, t -> new Image(getClass().getResourceAsStream("/gamehub/gamehub/chess/figure/" + t + ".png"))));
+        setImage(cache.computeIfAbsent(type, t -> new Image(getClass().getResourceAsStream("/gamehub/gamehub/games/chess/figure/" + t + ".png"))));
         setFitWidth(Board.SQUARE_SIZE);
         setFitHeight(Board.SQUARE_SIZE);
     }
@@ -26,7 +26,7 @@ public abstract class Figure extends ImageView {
     public static void preloadAll() {
         String[] types = {"wK","wQ","wB","wN","wR","wP","bK","bQ","bB","bN","bR","bP"};
         for (String type : types) {
-            cache.computeIfAbsent(type, t -> new Image(Figure.class.getResourceAsStream("/gamehub/gamehub/chess/figure/" + t + ".png")));
+            cache.computeIfAbsent(type, t -> new Image(Figure.class.getResourceAsStream("/gamehub/gamehub/games/chess/figure/" + t + ".png")));
         }
     }
     public boolean canMoveTo(int targetCol, int targetRow, Board board) {

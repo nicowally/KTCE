@@ -1,6 +1,6 @@
 package gamehub.gamehub;
 
-import gamehub.snake_new.SnakeGameNew;
+import gamehub.games.snake_new.SnakeGameNew;
 import javafx.embed.swing.SwingNode;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Button;

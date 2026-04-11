@@ -1,6 +1,6 @@
 package gamehub.games.chess.figures;
 
-import gamehub.games.chess.ChessBoard;
+import gamehub.gamehub.ChessBoard;
 import gamehub.games.chess.Figure;
 
 public class Knight extends Figure {

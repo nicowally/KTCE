@@ -1,5 +1,6 @@
-package gamehub.games.chess;
+package gamehub.gamehub;
 
+import gamehub.games.chess.Figure;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Label;

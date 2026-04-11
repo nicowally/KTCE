@@ -1,5 +1,6 @@
 package gamehub.games.chess;
 
+import gamehub.gamehub.ChessBoard;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 

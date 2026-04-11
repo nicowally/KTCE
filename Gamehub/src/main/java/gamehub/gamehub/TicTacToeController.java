@@ -1,6 +1,7 @@
-package gamehub.games.ticTacToe;
+package gamehub.gamehub;
 
-import gamehub.gamehub.GamehubApplication;
+import gamehub.games.ticTacToe.Player;
+import gamehub.games.ticTacToe.TicTacToeGame;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Button;

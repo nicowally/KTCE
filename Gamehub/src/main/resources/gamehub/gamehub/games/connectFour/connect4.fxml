@@ -14,7 +14,7 @@
 <BorderPane maxHeight="Infinity" maxWidth="Infinity" style="-fx-background-color: #1a1a2e;"
             xmlns="http://javafx.com/javafx/25"
             xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="gamehub.games.connectFour.Connect4Controller">
+            fx:controller="gamehub.gamehub.Connect4Controller">
 
     <top>
         <VBox alignment="CENTER_LEFT" maxWidth="Infinity" style="-fx-padding: 15;">

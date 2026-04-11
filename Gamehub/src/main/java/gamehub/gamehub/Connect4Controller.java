@@ -1,6 +1,7 @@
-package gamehub.games.connectFour;
+package gamehub.gamehub;
 
-import gamehub.gamehub.GamehubApplication;
+import gamehub.games.connectFour.Connect4Game;
+import gamehub.games.connectFour.Connect4Player;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Pos;

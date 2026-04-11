@@ -9,7 +9,7 @@
 <?import javafx.scene.shape.Rectangle?>
 <?import javafx.scene.text.Font?>
 
-<BorderPane style="-fx-background-color: #1a1a2e;" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="gamehub.games.chess.ChessController">
+<BorderPane style="-fx-background-color: #1a1a2e;" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="gamehub.gamehub.ChessController">
    <center>
       <VBox spacing="15.0" BorderPane.alignment="TOP_CENTER">
          <children>

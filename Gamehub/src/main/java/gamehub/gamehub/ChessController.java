@@ -1,6 +1,5 @@
-package gamehub.games.chess;
+package gamehub.gamehub;
 
-import gamehub.gamehub.GamehubApplication;
 import gamehub.games.chess.figures.*;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;

@@ -12,7 +12,8 @@ public abstract class Figure extends ImageView {
     public String type;
     public int col;
     public int row;
-    private static final Map<String, Image> cache = new HashMap<>();
+    public static final Map<String, Image> cache = new HashMap<>();
+    public boolean hasMoved = false;
 
     public Figure(String type, int col, int row) {
         this.type = type;
@@ -30,8 +31,5 @@ public abstract class Figure extends ImageView {
             cache.computeIfAbsent(type, t -> new Image(Figure.class.getResourceAsStream("/gamehub/gamehub/games/chess/figure/" + t + ".png")));
         }
     }
-    public boolean canMoveTo(int targetCol, int targetRow, ChessBoard board) {
-        // unbekannte Figur darf sich nicht bewegen
-        return false;
-    }
+    public abstract boolean canMoveTo(int targetCol, int targetRow, BoardLogic logic);
 }

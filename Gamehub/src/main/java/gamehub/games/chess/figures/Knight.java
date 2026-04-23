@@ -1,6 +1,6 @@
 package gamehub.games.chess.figures;
 
-import gamehub.gamehub.ChessBoard;
+import gamehub.games.chess.BoardLogic;
 import gamehub.games.chess.Figure;
 
 public class Knight extends Figure {
@@ -9,7 +9,7 @@ public class Knight extends Figure {
         super(colour + "N", col, row);
     }
     @Override
-    public boolean canMoveTo(int targetCol, int targetRow, ChessBoard chessBoard) {
+    public boolean canMoveTo(int targetCol, int targetRow, BoardLogic logic) {
         int diffCol = Math.abs(targetCol - col);
         int diffRow = Math.abs(targetRow - row);
         //  LMove weil immer 2 in eine Richtung, 1 in die andere
@@ -18,7 +18,7 @@ public class Knight extends Figure {
         if (!isLMove) return false;
 
         // Prüfen, ob auf dem Zielfeld eine eigene Figur steht
-        Figure target = chessBoard.getFigureAt(targetCol, targetRow);
+        Figure target = logic.getFigureAt(targetCol, targetRow);
         if (target != null && target.type.startsWith(this.type.substring(0,1))) {
             return false;
         }

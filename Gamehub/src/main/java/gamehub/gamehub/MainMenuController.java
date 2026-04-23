@@ -16,13 +16,30 @@ public class MainMenuController {
 
     @FXML
     protected void onChessClick() {
-        try {
-            FXMLLoader loader = new FXMLLoader(
-                    GamehubApplication.class.getResource("/gamehub/gamehub/games/chess/chess.fxml")
-            );
-            mainMenu.getScene().setRoot(loader.load());
-        } catch (IOException e) {
-            e.printStackTrace();
+        Alert choiceAlert = new Alert(Alert.AlertType.CONFIRMATION);
+        choiceAlert.setTitle("Spielmodus wählen");
+        choiceAlert.setHeaderText("Wie möchtest du Schach spielen?");
+        choiceAlert.setContentText("Wähle einen Modus:");
+        ButtonType chessLocal = new ButtonType("Lokal (2 Spieler)");
+        ButtonType chessLan = new ButtonType("LAN (Netzwerk)");
+        ButtonType chessCancel = new ButtonType("Abbrechen");
+
+        choiceAlert.getButtonTypes().setAll(chessLocal, chessLan, chessCancel);
+
+        Optional<ButtonType> result = choiceAlert.showAndWait();
+        if (result.isPresent()) {
+            if (result.get() == chessLocal) {
+                try {
+                    FXMLLoader loader = new FXMLLoader(
+                            GamehubApplication.class.getResource("/gamehub/gamehub/games/chess/chess.fxml")
+                    );
+                    mainMenu.getScene().setRoot(loader.load());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } else if (result.get() == chessLan) {
+                System.out.println("LAN-Modus ausgewählt");
+            }
         }
     }
 

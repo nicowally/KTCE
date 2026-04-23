@@ -1,6 +1,6 @@
 package gamehub.games.chess.figures;
 
-import gamehub.gamehub.ChessBoard;
+import gamehub.games.chess.BoardLogic;
 import gamehub.games.chess.Figure;
 
 public class Rook extends Figure {
@@ -10,17 +10,17 @@ public class Rook extends Figure {
     }
 
     @Override
-    public boolean canMoveTo(int targetCol, int targetRow, ChessBoard chessBoard) {
+    public boolean canMoveTo(int targetCol, int targetRow, BoardLogic logic) {
         if(targetCol != col && targetRow != row) {
             return false;
         }
-        if(!chessBoard.isPathClear(col,row,targetCol,targetRow)) {
+        if(!logic.isPathClear(col,row,targetCol,targetRow)) {
             return false;
         }
-        Figure target = chessBoard.getFigureAt(targetCol, targetRow);
+        Figure target = logic.getFigureAt(targetCol, targetRow);
         if (target != null && target.type.startsWith(this.type.substring(0,1))) {
             return false;
         }
-    return  true;
+        return  true;
     }
 }

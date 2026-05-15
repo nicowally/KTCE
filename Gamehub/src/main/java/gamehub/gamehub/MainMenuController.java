@@ -57,11 +57,36 @@ public class MainMenuController {
 
     @FXML
     protected void onTicTacToeClick() {
+        // Ask the user whether they want to play against another player or the AI
+        ButtonType twoPlayerBtn = new ButtonType("Gegen Spieler");
+        ButtonType aiBtn        = new ButtonType("Gegen KI");
+        ButtonType cancelBtn    = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Tic-Tac-Toe");
+        alert.setHeaderText("Gegen wen möchtest du spielen?");
+        alert.setContentText("Wähle einen Spielmodus.");
+        alert.getButtonTypes().setAll(twoPlayerBtn, aiBtn, cancelBtn);
+
+        Optional<ButtonType> result = alert.showAndWait();
+
+        if (result.isEmpty() || result.get() == cancelBtn) return;
+
+        boolean vsAI = result.get() == aiBtn;
+
         try {
             FXMLLoader loader = new FXMLLoader(
                     GamehubApplication.class.getResource("/gamehub/gamehub/games/ticTacToe/game.fxml")
             );
-            mainMenu.getScene().setRoot(loader.load());
+            // Load the FXML – this also calls TicTacToeController.initialize()
+            javafx.scene.Parent root = loader.load();
+
+            // Pass the mode to the controller, then call postInit()
+            TicTacToeController controller = loader.getController();
+            controller.initMode(vsAI);
+            controller.postInit();
+
+            mainMenu.getScene().setRoot(root);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -70,8 +95,8 @@ public class MainMenuController {
     @FXML
     protected void onSnakeClick() {
         ButtonType classicButton = new ButtonType("Classic");
-        ButtonType modernButton = new ButtonType("Modern");
-        ButtonType cancelButton = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
+        ButtonType modernButton  = new ButtonType("Modern");
+        ButtonType cancelButton  = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Snake auswählen");

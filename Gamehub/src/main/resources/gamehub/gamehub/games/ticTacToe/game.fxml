@@ -3,126 +3,99 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
-<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.Slider?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.ColumnConstraints?>
 <?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.canvas.Canvas?>
 
-<BorderPane maxHeight="Infinity" maxWidth="Infinity" style="-fx-background-color: #1a1a2e;"
+<BorderPane maxHeight="Infinity" maxWidth="Infinity"
+            style="-fx-background-color: #0d0d1a;"
             xmlns="http://javafx.com/javafx/25"
             xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="gamehub.gamehub.TicTacToeController">
 
+    <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
     <top>
-        <VBox alignment="CENTER_LEFT" maxWidth="Infinity" style="-fx-padding: 15;">
-            <children>
-                <Button mnemonicParsing="false" onAction="#onBackClick" text="Zurück" />
-            </children>
-        </VBox>
+        <HBox alignment="CENTER_LEFT" spacing="12"
+              style="-fx-padding: 14 20 14 20; -fx-background-color: #13132a; -fx-border-color: #2a2a4a; -fx-border-width: 0 0 1 0;">
+            <Button fx:id="backBtn" mnemonicParsing="false" onAction="#onBackClick" text="← Zurück"
+                    style="-fx-background-color: transparent; -fx-text-fill: #8888bb; -fx-font-size: 14px; -fx-cursor: hand; -fx-padding: 6 12; -fx-border-color: #3a3a5c; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6;" />
+            <Label text="Tic-Tac-Toe"
+                   style="-fx-text-fill: white; -fx-font-size: 22px; -fx-font-weight: bold; -fx-padding: 0 0 0 8;" />
+            <!-- Spacer -->
+            <HBox HBox.hgrow="ALWAYS" />
+            <Button fx:id="rulesBtn" mnemonicParsing="false" onAction="#onRulesClick" text="📋 Regeln"
+                    style="-fx-background-color: transparent; -fx-text-fill: #8888bb; -fx-font-size: 14px; -fx-cursor: hand; -fx-padding: 6 14; -fx-border-color: #3a3a5c; -fx-border-width: 1; -fx-border-radius: 6; -fx-background-radius: 6;" />
+        </HBox>
     </top>
 
+    <!-- ── Centre ──────────────────────────────────────────────────────────── -->
     <center>
-        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
-                    style="-fx-background-color: transparent; -fx-background: transparent;">
-            <content>
-                <VBox alignment="CENTER" spacing="16.0" BorderPane.alignment="CENTER">
-                    <padding><Insets top="20" bottom="40" left="40" right="40" /></padding>
+        <VBox alignment="CENTER" spacing="20"
+              style="-fx-padding: 24 40 32 40; -fx-background-color: #0d0d1a;">
 
-                    <!-- Status label -->
-                    <Label fx:id="statusLabel"
-                           text="Spieler X ist dran"
-                           style="-fx-text-fill: white; -fx-font-size: 28px; -fx-font-weight: bold;" />
+            <!-- Status label -->
+            <Label fx:id="statusLabel"
+                   text="Spieler X ist dran"
+                   style="-fx-text-fill: white; -fx-font-size: 26px; -fx-font-weight: bold;" />
 
-                    <!-- ── AI-only controls ─────────────────────────────────────────────── -->
+            <!-- ── AI controls ──────────────────────────────────────────────── -->
+            <HBox fx:id="sideSelectionBox" alignment="CENTER" spacing="16"
+                  visible="false" managed="false">
+                <Button fx:id="playerSideBtn" text="Spieler  X" onAction="#onPlayerSideBtnClick"
+                        style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #4a90d9; -fx-text-fill: white; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;" />
+                <Button fx:id="aiSideBtn" text="KI  O" onAction="#onAiSideBtnClick"
+                        style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #2a2a4a; -fx-text-fill: #8888bb; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;" />
+            </HBox>
 
-                    <!-- Side selection buttons (hidden in 2-player mode) -->
-                    <HBox fx:id="sideSelectionBox"
-                          alignment="CENTER" spacing="20"
-                          visible="false" managed="false">
-                        <Button fx:id="playerSideBtn"
-                                text="Spieler   X"
-                                onAction="#onPlayerSideBtnClick"
-                                style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-background-color: #4a90d9; -fx-text-fill: white; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 10 24;" />
-                        <Button fx:id="aiSideBtn"
-                                text="KI   O"
-                                onAction="#onAiSideBtnClick"
-                                style="-fx-font-size: 15px; -fx-font-weight: bold; -fx-background-color: #3a3a5c; -fx-text-fill: #aaaaaa; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 10 24;" />
-                    </HBox>
+            <VBox fx:id="difficultyBox" alignment="CENTER" spacing="5"
+                  visible="false" managed="false">
+                <Label text="Schwierigkeit"
+                       style="-fx-text-fill: #6666aa; -fx-font-size: 12px;" />
+                <Slider fx:id="difficultySlider" min="0" max="100" value="100"
+                        prefWidth="280"
+                        style="-fx-accent: #4a90d9;" />
+                <Label fx:id="difficultyLabel" text="Unschlagbar"
+                       style="-fx-text-fill: #aaaacc; -fx-font-size: 14px; -fx-font-weight: bold;" />
+            </VBox>
 
-                    <!-- Difficulty slider (hidden in 2-player mode) -->
-                    <VBox fx:id="difficultyBox"
-                          alignment="CENTER" spacing="6"
-                          visible="false" managed="false">
-                        <Label text="Schwierigkeit"
-                               style="-fx-text-fill: #aaaaaa; -fx-font-size: 13px;" />
-                        <Slider fx:id="difficultySlider"
-                                min="0" max="100" value="100"
-                                showTickLabels="false" showTickMarks="false"
-                                prefWidth="320"
-                                style="-fx-accent: #4a90d9;" />
-                        <Label fx:id="difficultyLabel"
-                               text="Unschlagbar"
-                               style="-fx-text-fill: white; -fx-font-size: 16px; -fx-font-weight: bold;" />
-                    </VBox>
+            <!-- ── Board ────────────────────────────────────────────────────── -->
+            <!--
+                boardGrid lives inside a StackPane so the win-line Line can be
+                added as a sibling on top without affecting layout.
+            -->
+            <StackPane>
+                <GridPane fx:id="boardGrid"
+                          hgap="0" vgap="0"
+                          alignment="CENTER"
+                          style="-fx-padding: 0;">
+                    <columnConstraints>
+                        <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
+                        <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
+                        <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
+                    </columnConstraints>
+                    <rowConstraints>
+                        <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
+                        <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
+                        <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
+                    </rowConstraints>
+                    <!-- Cells added programmatically in TicTacToeController -->
+                </GridPane>
+                <!-- Win-line Line added here at runtime -->
+            </StackPane>
 
-                    <!-- ── Game board ───────────────────────────────────────────────────── -->
+            <!-- ── Bottom buttons ───────────────────────────────────────────── -->
+            <HBox alignment="CENTER" spacing="16">
+                <Button mnemonicParsing="false" onAction="#onRestartClick" text="Neu starten"
+                        style="-fx-font-size: 15px; -fx-padding: 10 28; -fx-background-color: #1e1e3a; -fx-text-fill: #aaaacc; -fx-background-radius: 8; -fx-border-color: #3a3a5c; -fx-border-width: 1; -fx-border-radius: 8; -fx-cursor: hand;" />
+            </HBox>
 
-                    <GridPane fx:id="boardGrid"
-                              hgap="8" vgap="8"
-                              alignment="CENTER"
-                              VBox.vgrow="ALWAYS"
-                              maxWidth="Infinity" maxHeight="Infinity"
-                              style="-fx-padding: 10;">
-                        <columnConstraints>
-                            <ColumnConstraints hgrow="ALWAYS" percentWidth="33.33" />
-                            <ColumnConstraints hgrow="ALWAYS" percentWidth="33.33" />
-                            <ColumnConstraints hgrow="ALWAYS" percentWidth="33.34" />
-                        </columnConstraints>
-                        <rowConstraints>
-                            <RowConstraints vgrow="ALWAYS" percentHeight="33.33" />
-                            <RowConstraints vgrow="ALWAYS" percentHeight="33.33" />
-                            <RowConstraints vgrow="ALWAYS" percentHeight="33.34" />
-                        </rowConstraints>
-                        <children>
-                            <Button fx:id="cell0" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="0" GridPane.rowIndex="0" />
-                            <Button fx:id="cell1" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="1" GridPane.rowIndex="0" />
-                            <Button fx:id="cell2" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="2" GridPane.rowIndex="0" />
-                            <Button fx:id="cell3" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="0" GridPane.rowIndex="1" />
-                            <Button fx:id="cell4" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="1" GridPane.rowIndex="1" />
-                            <Button fx:id="cell5" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="2" GridPane.rowIndex="1" />
-                            <Button fx:id="cell6" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="0" GridPane.rowIndex="2" />
-                            <Button fx:id="cell7" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="1" GridPane.rowIndex="2" />
-                            <Button fx:id="cell8" onAction="#onCellClick" maxWidth="Infinity" maxHeight="Infinity"
-                                    style="-fx-font-size: 60px; -fx-font-weight: bold; -fx-background-color: #778CA1; -fx-text-fill: white; -fx-cursor: hand;"
-                                    GridPane.columnIndex="2" GridPane.rowIndex="2" />
-                        </children>
-                    </GridPane>
-
-                    <Button mnemonicParsing="false" onAction="#onRestartClick" text="Neu starten"
-                            style="-fx-font-size: 18px; -fx-padding: 10 30;" />
-                </VBox>
-            </content>
-        </ScrollPane>
+        </VBox>
     </center>
 
 </BorderPane>

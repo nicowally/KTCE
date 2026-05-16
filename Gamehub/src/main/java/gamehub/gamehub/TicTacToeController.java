@@ -7,22 +7,16 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.CycleMethod;
-import javafx.scene.paint.LinearGradient;
-import javafx.scene.paint.Stop;
 import javafx.scene.shape.Line;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.util.Duration;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Modern Tic-Tac-Toe controller.
@@ -56,14 +50,15 @@ public class TicTacToeController {
     private static final double CELL_SIZE     = 140.0;   // matches FXML prefWidth/Height
 
     // ── FXML ─────────────────────────────────────────────────────────────────
-    @FXML private GridPane boardGrid;
-    @FXML private Label    statusLabel;
-    @FXML private HBox     sideSelectionBox;
-    @FXML private Button   playerSideBtn;
-    @FXML private Button   aiSideBtn;
-    @FXML private VBox     difficultyBox;
-    @FXML private Slider   difficultySlider;
-    @FXML private Label    difficultyLabel;
+    @FXML private Pane      boardWrapper;   // absolute-positioned container for win-line
+    @FXML private GridPane  boardGrid;
+    @FXML private Label     statusLabel;
+    @FXML private HBox      sideSelectionBox;
+    @FXML private Button    playerSideBtn;
+    @FXML private Button    aiSideBtn;
+    @FXML private VBox      difficultyBox;
+    @FXML private Slider    difficultySlider;
+    @FXML private Label     difficultyLabel;
 
     // ── State ─────────────────────────────────────────────────────────────────
     /** Per-cell symbol canvases (index 0-8). */
@@ -286,33 +281,47 @@ public class TicTacToeController {
 
     /** Animate the winning line across the board. */
     private void animateWinLine(int[] line) {
-        // Compute start and end centres of the winning cells
-        double[] start = cellCentre(line[0]);
-        double[] end   = cellCentre(line[2]);
+        // Overshoot: extend the line 28px past the outer cell centres so it
+        // visually crosses through the symbols rather than stopping at their centres.
+        final double OVERSHOOT = 46.0;
 
-        Line winLine = new Line(start[0], start[1], start[0], start[1]);
+        double[] s = cellCentre(line[0]);
+        double[] e = cellCentre(line[2]);
+
+        // Direction unit vector (for overshoot extension)
+        double dx = e[0] - s[0];
+        double dy = e[1] - s[1];
+        double len = Math.sqrt(dx * dx + dy * dy);
+        double ux = (len > 0) ? dx / len : 0;
+        double uy = (len > 0) ? dy / len : 0;
+
+        double startX = s[0] - ux * OVERSHOOT;
+        double startY = s[1] - uy * OVERSHOOT;
+        double endX   = e[0] + ux * OVERSHOOT;
+        double endY   = e[1] + uy * OVERSHOOT;
+
+        Line winLine = new Line(startX, startY, startX, startY);
         winLine.setStroke(COLOR_WIN_LINE);
-        winLine.setStrokeWidth(6);
+        winLine.setStrokeWidth(10);
         winLine.setStrokeLineCap(StrokeLineCap.ROUND);
-        winLine.setOpacity(0.9);
+        winLine.setOpacity(0.92);
+        // Make the line pointer-transparent so it doesn't block cell interaction
+        winLine.setMouseTransparent(true);
 
-        // Add the line on top of the boardGrid inside its parent StackPane
-        // We wrap boardGrid in a StackPane overlay approach using a Pane sibling
-        StackPane boardWrapper = getBoardWrapper();
-        if (boardWrapper != null) boardWrapper.getChildren().add(winLine);
+        // boardWrapper is a Pane → children use absolute coordinates relative to
+        // the Pane's top-left, which matches cellCentre() perfectly.
+        boardWrapper.getChildren().add(winLine);
 
-        KeyValue kvX = new KeyValue(winLine.endXProperty(), end[0], Interpolator.EASE_OUT);
-        KeyValue kvY = new KeyValue(winLine.endYProperty(), end[1], Interpolator.EASE_OUT);
-        Timeline tl  = new Timeline(new KeyFrame(Duration.millis(380), kvX, kvY));
+        KeyValue kvX = new KeyValue(winLine.endXProperty(), endX, Interpolator.EASE_OUT);
+        KeyValue kvY = new KeyValue(winLine.endYProperty(), endY, Interpolator.EASE_OUT);
+        Timeline tl  = new Timeline(new KeyFrame(Duration.millis(420), kvX, kvY));
         tl.play();
 
         // Dim non-winning cells
         for (int i = 0; i < 9; i++) {
             boolean inLine = false;
             for (int li : line) if (li == i) inLine = true;
-            if (!inLine && game.getCell(i) != null) {
-                dimCell(i);
-            }
+            if (!inLine && game.getCell(i) != null) dimCell(i);
         }
     }
 
@@ -331,16 +340,6 @@ public class TicTacToeController {
         ft.setFromValue(1.0);
         ft.setToValue(0.28);
         ft.play();
-    }
-
-    /** Finds the StackPane that wraps the boardGrid (for win-line overlay). */
-    private StackPane getBoardWrapper() {
-        Node parent = boardGrid.getParent();
-        while (parent != null) {
-            if (parent instanceof StackPane sp) return sp;
-            parent = parent.getParent();
-        }
-        return null;
     }
 
     // ── Side-selection ────────────────────────────────────────────────────────
@@ -564,11 +563,8 @@ public class TicTacToeController {
         game.reset();
         gameStarted = false;
 
-        // Remove any win-line overlays added to the board wrapper
-        StackPane wrapper = getBoardWrapper();
-        if (wrapper != null) {
-            wrapper.getChildren().removeIf(n -> n instanceof Line);
-        }
+        // Remove any win-line Lines added to boardWrapper
+        boardWrapper.getChildren().removeIf(n -> n instanceof Line);
 
         // Rebuild board visuals
         buildBoard();

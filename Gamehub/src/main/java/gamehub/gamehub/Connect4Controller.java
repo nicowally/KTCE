@@ -340,8 +340,7 @@ public class Connect4Controller {
         patterns.getChildren().addAll(
                 buildPatternCanvas("Waagerecht",  buildHorizontalPattern()),
                 buildPatternCanvas("Senkrecht",   buildVerticalPattern()),
-                buildPatternCanvas("Diagonal ↗",  buildDiagUpPattern()),
-                buildPatternCanvas("Diagonal ↘",  buildDiagDownPattern())
+                buildPatternCanvas("Diagonal",  buildDiagPattern())
         );
 
         Label tipsTitle = styledLabel("Tipps", "#ccccee", 16, true);
@@ -441,32 +440,26 @@ public class Connect4Controller {
     }
 
     private int[][] buildHorizontalPattern() {
-        int[][] g = new int[3][6];
-        g[2][1] = 1; g[2][2] = 1; g[2][3] = 1; g[2][4] = 1;
-        g[1][0] = 2; g[1][3] = 2; g[0][2] = 2;
+        int[][] g = new int[6][6];
+        g[5][1] = 1; g[5][2] = 1; g[5][3] = 1; g[5][4] = 1;
+        g[5][0] = 2; g[5][5] = 2; g[4][1] = 2;
         return g;
     }
 
     private int[][] buildVerticalPattern() {
-        int[][] g = new int[6][4];
-        g[2][1] = 1; g[3][1] = 1; g[4][1] = 1; g[5][1] = 1;
-        g[5][2] = 2; g[4][3] = 2; g[5][0] = 2; g[4][0] = 2;
+        int[][] g = new int[6][5];
+        g[5][2] = 1; g[4][2] = 1; g[3][2] = 1; g[2][2] = 1;
+        g[5][0] = 2; g[5][1] = 2; g[4][1] = 2;
         return g;
     }
 
-    private int[][] buildDiagUpPattern() {
-        int[][] g = new int[4][4];
-        g[3][0] = 1; g[2][1] = 1; g[1][2] = 1; g[0][3] = 1;
-        g[3][1] = 2; g[3][2] = 2; g[2][2] = 2;
+    private int[][] buildDiagPattern() {
+        int[][] g = new int[6][5];
+        g[5][0] = 1; g[4][1] = 1; g[5][3] = 1; g[3][2] = 1; g[3][3] = 1; g[2][3] = 1;
+        g[5][1] = 2; g[5][2] = 2; g[4][2] = 2; g[4][3] = 2; g[5][4] = 2;
         return g;
     }
 
-    private int[][] buildDiagDownPattern() {
-        int[][] g = new int[4][4];
-        g[0][0] = 1; g[1][1] = 1; g[2][2] = 1; g[3][3] = 1;
-        g[1][0] = 2; g[2][0] = 2; g[2][1] = 2;
-        return g;
-    }
 
     // ── Status ────────────────────────────────────────────────────────────────
     private void updateStatus() {

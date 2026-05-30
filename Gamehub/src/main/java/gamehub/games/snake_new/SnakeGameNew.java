@@ -1,12 +1,14 @@
 package gamehub.games.snake_new;
 
 import javax.swing.*;
+import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
-import java.util.ArrayList;
+import java.io.*;
+import java.net.Socket;
+import java.util.*;
 import java.util.List;
-import java.util.Random;
 
 public class SnakeGameNew extends JPanel implements ActionListener, KeyListener {
 
@@ -21,7 +23,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     private final Timer frameTimer;
     private long lastMoveTime;
 
-    // ===== Spielstatus =====
+    // ===== Single-Player Spielstatus =====
     private final List<SnakeSegment> snake = new ArrayList<>();
     private final Random random = new Random();
 
@@ -31,16 +33,12 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     private Direction currentDirection = Direction.RIGHT;
     private Direction nextDirection    = Direction.RIGHT;
 
-    // Spielzustand – LOBBY bedeutet: Einstellungsscreen vor dem ersten Start
     private enum GameState { LOBBY, RUNNING, PAUSED, GAME_OVER }
     private GameState gameState = GameState.LOBBY;
 
     private int score = 0;
-
-    // ===== Chaos-Modus =====
     private boolean chaosMode = false;
 
-    // Aktive Effekte
     private boolean shieldActive    = false;
     private boolean controlsFlipped = false;
     private boolean speedBoost      = false;
@@ -69,6 +67,33 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     };
     private int selectedColorIndex = 0;
 
+    // ===== Multiplayer =====
+    private boolean multiplayerMode = false;
+    private int     myPlayerId      = 0;  // 1 oder 2
+
+    // Empfangener Spielzustand vom Server
+    private volatile List<int[]> mpSnake1 = new ArrayList<>();
+    private volatile List<int[]> mpSnake2 = new ArrayList<>();
+    private volatile int[]  mpFood   = {18, 13};
+    private volatile String mpFruitType = "APPLE";
+    private volatile int    mpScore1 = 0, mpScore2 = 0;
+    private volatile String mpEff1 = "", mpEff2 = "";
+    private volatile int    mpMyColor = 0, mpOtherColor = 2;
+
+    // Interpolations-Puffer (vorherige und aktuelle Positionen)
+    private List<int[]> mpSnake1Prev = new ArrayList<>();
+    private List<int[]> mpSnake2Prev = new ArrayList<>();
+    private long mpLastStateTime = 0;
+
+    private enum MpState { CONNECTING, WAITING, WAITING_RESTART, PLAYING, GAME_OVER }
+    private volatile MpState mpState = MpState.CONNECTING;
+    private volatile String  mpWinner = "";
+    private volatile String  mpStatusMsg = "Verbinde...";
+
+    private Socket          mpSocket;
+    private PrintWriter     mpOut;
+    private BufferedReader  mpIn;
+
     // ===== Konstruktor =====
     public SnakeGameNew() {
         setPreferredSize(new Dimension(1100, 800));
@@ -78,12 +103,158 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         settingsPanel = new SettingsPanel(this);
         add(settingsPanel);
 
-        // Im Lobby-Zustand starten: Settings sichtbar, Spiel noch nicht laufend
         gameState = GameState.LOBBY;
         settingsPanel.setVisible(true);
 
         frameTimer = new Timer(FRAME_DELAY_MS, this);
         frameTimer.start();
+    }
+
+    // ===== Multiplayer Connect =====
+
+    public void connectToServer(String host, int port) {
+        multiplayerMode = true;
+        settingsPanel.setVisible(false);
+        mpState = MpState.CONNECTING;
+        mpStatusMsg = "Verbinde mit " + host + ":" + port + " ...";
+        repaint();
+
+        new Thread(() -> {
+            try {
+                mpSocket = new Socket(host, port);
+                mpOut = new PrintWriter(new OutputStreamWriter(mpSocket.getOutputStream()), true);
+                mpIn  = new BufferedReader(new InputStreamReader(mpSocket.getInputStream()));
+                mpStatusMsg = "Verbunden! Warte auf zweiten Spieler...";
+                mpState = MpState.WAITING;
+                repaint();
+                networkReadLoop();
+            } catch (IOException e) {
+                mpStatusMsg = "Verbindungsfehler: " + e.getMessage();
+                mpState = MpState.CONNECTING;
+                SwingUtilities.invokeLater(this::repaint);
+            }
+        }, "MP-Read").start();
+    }
+
+    private void networkReadLoop() {
+        try {
+            String line;
+            while ((line = mpIn.readLine()) != null) {
+                final String msg = line;
+                SwingUtilities.invokeLater(() -> handleServerMessage(msg));
+            }
+        } catch (IOException e) {
+            if (mpState != MpState.GAME_OVER) {
+                mpStatusMsg = "Verbindung unterbrochen!";
+                mpState = MpState.GAME_OVER;
+                mpWinner = "?";
+                SwingUtilities.invokeLater(this::repaint);
+            }
+        }
+    }
+
+    private void handleServerMessage(String msg) {
+        if (msg.equals("WAITING")) {
+            mpState = MpState.WAITING;
+            mpStatusMsg = "Warte auf zweiten Spieler...";
+        } else if (msg.startsWith("COLORINFO:")) {
+            String[] p = msg.substring(10).split(":");
+            mpMyColor    = Integer.parseInt(p[0]);
+            mpOtherColor = Integer.parseInt(p[1]);
+            selectedColorIndex = mpMyColor;
+        } else if (msg.startsWith("START:")) {
+            String[] p = msg.substring(6).split(":");
+            mpMyColor    = Integer.parseInt(p[0]);
+            mpOtherColor = Integer.parseInt(p[1]);
+            selectedColorIndex = mpMyColor;
+            mpState = MpState.PLAYING;
+            mpWinner = "";
+        } else if (msg.startsWith("STATE:")) {
+            parseState(msg.substring(6));
+        } else if (msg.startsWith("GAMEOVER:")) {
+            mpWinner = msg.substring(9);
+            mpState = MpState.GAME_OVER;
+        } else if (msg.equals("WAITING_RESTART")) {
+            mpState = MpState.WAITING_RESTART;
+            mpStatusMsg = "Warte auf anderen Spieler für Neustart...";
+        }
+        repaint();
+    }
+
+    private void parseState(String json) {
+        // Einfacher manueller Parser für das kompakte JSON-Format
+        try {
+            mpSnake1Prev = new ArrayList<>(mpSnake1);
+            mpSnake2Prev = new ArrayList<>(mpSnake2);
+            mpLastStateTime = System.currentTimeMillis();
+
+            mpSnake1 = parseSegList(extractField(json, "s1"));
+            mpSnake2 = parseSegList(extractField(json, "s2"));
+
+            String fArr = extractField(json, "f");
+            String[] fp = fArr.replaceAll("[\\[\\]]","").split(",");
+            mpFood = new int[]{Integer.parseInt(fp[0].trim()), Integer.parseInt(fp[1].trim())};
+
+            mpFruitType = extractStringField(json, "ft");
+            mpScore1    = Integer.parseInt(extractField(json, "sc1").trim());
+            mpScore2    = Integer.parseInt(extractField(json, "sc2").trim());
+            mpEff1      = extractStringField(json, "eff1");
+            mpEff2      = extractStringField(json, "eff2");
+        } catch (Exception ignored) {}
+    }
+
+    private String extractField(String json, String key) {
+        // Findet "key": VALUE bis zum nächsten Komma/} (für Zahlen und Arrays)
+        String search = "\"" + key + "\":";
+        int si = json.indexOf(search);
+        if (si < 0) return "";
+        int vi = si + search.length();
+        char first = json.charAt(vi);
+        if (first == '[') {
+            // Finde passendes ]
+            int depth = 0, ei = vi;
+            while (ei < json.length()) {
+                char c = json.charAt(ei);
+                if (c == '[') depth++;
+                if (c == ']') { depth--; if (depth == 0) { ei++; break; } }
+                ei++;
+            }
+            return json.substring(vi, ei);
+        }
+        int end = json.indexOf(',', vi);
+        if (end < 0) end = json.indexOf('}', vi);
+        return end < 0 ? json.substring(vi) : json.substring(vi, end);
+    }
+
+    private String extractStringField(String json, String key) {
+        String search = "\"" + key + "\":\"";
+        int si = json.indexOf(search);
+        if (si < 0) return "";
+        int vi = si + search.length();
+        int end = json.indexOf('"', vi);
+        return end < 0 ? "" : json.substring(vi, end);
+    }
+
+    private List<int[]> parseSegList(String arr) {
+        List<int[]> list = new ArrayList<>();
+        if (arr.isEmpty() || arr.equals("[]")) return list;
+        String inner = arr.substring(1, arr.length()-1).trim();
+        if (inner.isEmpty()) return list;
+        // Finde alle [x,y]
+        int i = 0;
+        while (i < inner.length()) {
+            int start = inner.indexOf('[', i);
+            if (start < 0) break;
+            int end = inner.indexOf(']', start);
+            if (end < 0) break;
+            String pair = inner.substring(start+1, end);
+            String[] parts = pair.split(",");
+            if (parts.length == 2) {
+                list.add(new int[]{Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim())});
+            }
+            i = end + 1;
+        }
+        return list;
     }
 
     // ===== Helper Types =====
@@ -127,8 +298,9 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     private int getOffsetX()     { return (getWidth()  - getBoardWidth())  / 2; }
     private int getOffsetY()     { return (getHeight() - getBoardHeight()) / 2; }
 
-    // ===== Spielstart =====
+    // ===== Spielstart (Single-Player) =====
     public void startGame() {
+        if (multiplayerMode) return;
         snake.clear();
         for (int i=8; i>=4; i--) snake.add(new SnakeSegment(i, 8));
 
@@ -143,7 +315,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         spawnFood();
         lastMoveTime = System.currentTimeMillis();
 
-        // Settings ausblenden, Spiel läuft
         gameState = GameState.RUNNING;
         settingsPanel.setVisible(false);
     }
@@ -182,10 +353,12 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     // ===== Game Loop =====
     @Override
     public void actionPerformed(ActionEvent e) {
-        if (gameState == GameState.RUNNING) {
-            tickEffects();
-            long now = System.currentTimeMillis();
-            if (now - lastMoveTime >= moveDelayMs) { updateGame(); lastMoveTime=now; }
+        if (!multiplayerMode) {
+            if (gameState == GameState.RUNNING) {
+                tickEffects();
+                long now = System.currentTimeMillis();
+                if (now - lastMoveTime >= moveDelayMs) { updateGame(); lastMoveTime=now; }
+            }
         }
         repaint();
     }
@@ -245,7 +418,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
 
     private void triggerGameOver() {
         gameState = GameState.GAME_OVER;
-        // Settings wieder einblenden, damit der Spieler vor dem Neustart noch ändern kann
         settingsPanel.setVisible(true);
     }
 
@@ -281,22 +453,261 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
 
         double time = System.currentTimeMillis()/1000.0;
 
-        drawBackground(g2, time);
-
-        if (gameState == GameState.LOBBY) {
-            drawLobbyOverlay(g2);
+        if (multiplayerMode) {
+            drawBackground(g2, time);
+            paintMultiplayer(g2, time);
         } else {
-            float progress = getMoveProgress();
-            drawFood(g2, time);
-            drawSnakeWrapped(g2, progress, time);
-            drawHud(g2);
-            drawEffectOverlays(g2);
-            if (gameState == GameState.PAUSED)   drawCenteredOverlay(g2, "PAUSED",    "SPACE = Weiter");
-            if (gameState == GameState.GAME_OVER) drawCenteredOverlay(g2, "GAME OVER", "R = Neu starten");
+            drawBackground(g2, time);
+            if (gameState == GameState.LOBBY) {
+                drawLobbyOverlay(g2);
+            } else {
+                float progress = getMoveProgress();
+                drawFood(g2, time);
+                drawSnakeWrapped(g2, progress, time);
+                drawHud(g2);
+                drawEffectOverlays(g2);
+                if (gameState == GameState.PAUSED)   drawCenteredOverlay(g2, "PAUSED",    "SPACE = Weiter");
+                if (gameState == GameState.GAME_OVER) drawCenteredOverlay(g2, "GAME OVER", "R = Neu starten");
+            }
         }
 
         g2.dispose();
-        layoutSettingsPanel();
+        if (!multiplayerMode) layoutSettingsPanel();
+    }
+
+    // ── Multiplayer Paint ────────────────────────────────────────────────────
+    private void paintMultiplayer(Graphics2D g2, double time) {
+        switch (mpState) {
+            case CONNECTING, WAITING -> drawMpWaitScreen(g2);
+            case PLAYING             -> drawMpGame(g2, time);
+            case WAITING_RESTART     -> drawMpWaitScreen(g2);
+            case GAME_OVER           -> { drawMpGame(g2, time); drawMpGameOver(g2); }
+        }
+    }
+
+    private void drawMpWaitScreen(Graphics2D g2) {
+        int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
+        g2.setColor(new Color(0,0,0,120)); g2.fillRect(bx,by,bw,bh);
+        int boxW=Math.min(400,bw-40), boxH=130;
+        int boxX=bx+(bw-boxW)/2, boxY=by+(bh-boxH)/2;
+        g2.setColor(new Color(20,28,22,230)); g2.fillRoundRect(boxX,boxY,boxW,boxH,28,28);
+        g2.setColor(new Color(255,255,255,30)); g2.drawRoundRect(boxX,boxY,boxW,boxH,28,28);
+        g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif",Font.BOLD,22));
+        FontMetrics fm=g2.getFontMetrics();
+        g2.drawString("MULTIPLAYER", bx+(bw-fm.stringWidth("MULTIPLAYER"))/2, boxY+42);
+        g2.setFont(new Font("SansSerif",Font.PLAIN,13)); fm=g2.getFontMetrics();
+        g2.setColor(new Color(180,240,180));
+        g2.drawString(mpStatusMsg, bx+(bw-fm.stringWidth(mpStatusMsg))/2, boxY+78);
+        // Pulsierender Rand
+        double pulse = 0.5+0.5*Math.sin(System.currentTimeMillis()/400.0);
+        g2.setColor(new Color(100,200,100,(int)(60+80*pulse)));
+        g2.setStroke(new BasicStroke(2f));
+        g2.drawRoundRect(boxX,boxY,boxW,boxH,28,28);
+    }
+
+    private void drawMpGame(Graphics2D g2, double time) {
+        // Futter
+        drawFoodMp(g2, time);
+
+        // Beide Schlangen aus Serverdaten
+        boolean iAm1 = myPlayerId == 1;
+        List<int[]> mySegs    = iAm1 ? mpSnake1 : mpSnake2;
+        List<int[]> otherSegs = iAm1 ? mpSnake2 : mpSnake1;
+        int myColor    = mpMyColor;
+        int otherColor = mpOtherColor;
+
+        // Andere Schlange zuerst (damit meine oben liegt)
+        drawNetSnake(g2, otherSegs, SNAKE_COLORS[otherColor], time, false);
+        drawNetSnake(g2, mySegs,    SNAKE_COLORS[myColor],    time, true);
+
+        // HUD
+        drawMpHud(g2);
+    }
+
+    private void drawNetSnake(Graphics2D g2, List<int[]> segs, SnakeColor col, double time, boolean isMe) {
+        if (segs.isEmpty()) return;
+        int ts=getTileSize(), bx=getOffsetX(), by=getOffsetY();
+
+        List<RenderPoint> pts = new ArrayList<>();
+        for (int[] s : segs) {
+            pts.add(new RenderPoint(bx + s[0]*ts + ts/2f, by + s[1]*ts + ts/2f));
+        }
+        pts = applySlither(pts, time);
+
+        // Clip
+        Shape oldClip = g2.getClip();
+        g2.setClip(bx, by, getBoardWidth(), getBoardHeight());
+
+        int t = ts;
+        Path2D.Float path = buildSmoothPath(pts);
+
+        // Schatten
+        AffineTransform old = g2.getTransform();
+        g2.translate(Math.max(2,t*0.15), Math.max(3,t*0.2));
+        g2.setColor(new Color(0,0,0,50));
+        g2.setStroke(new BasicStroke(Math.max(8f,t*0.95f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+        g2.draw(path);
+        g2.setTransform(old);
+
+        // Körper
+        g2.setColor(col.outer);
+        g2.setStroke(new BasicStroke(Math.max(7f,t*0.85f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+        g2.draw(path);
+        g2.setColor(col.inner);
+        g2.setStroke(new BasicStroke(Math.max(4f,t*0.5f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+        g2.draw(path);
+
+        // Mein Spieler – leichter Glow
+        if (isMe) {
+            g2.setColor(new Color(col.inner.getRed(), col.inner.getGreen(), col.inner.getBlue(), 40));
+            g2.setStroke(new BasicStroke(Math.max(12f,t*1.2f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+            g2.draw(path);
+        }
+
+        // Kopf
+        drawNetHead(g2, pts, col, time, t);
+
+        g2.setClip(oldClip);
+    }
+
+    private void drawNetHead(Graphics2D g2, List<RenderPoint> pts, SnakeColor col, double time, int t) {
+        if (pts.isEmpty()) return;
+        RenderPoint head = pts.get(0);
+        double angle = 0;
+        if (pts.size() >= 2) {
+            RenderPoint next = pts.get(1);
+            angle = Math.atan2(head.y - next.y, head.x - next.x);
+        }
+        float headW=Math.max(14f,t*1.2f), headH=Math.max(10f,t*0.95f);
+        AffineTransform old=g2.getTransform();
+        g2.translate(head.x, head.y);
+        g2.rotate(angle);
+        g2.setColor(new Color(0,0,0,40));
+        g2.fill(new Ellipse2D.Float(-headW/2f+2,-headH/2f+3,headW,headH));
+        g2.setColor(col.outer);
+        g2.fill(new Ellipse2D.Float(-headW/2f,-headH/2f,headW,headH));
+        g2.setColor(col.head);
+        g2.fill(new Ellipse2D.Float(-headW/2f+2,-headH/2f+2,headW-4,headH-4));
+        g2.setColor(new Color(255,255,255,45));
+        g2.fill(new Ellipse2D.Float(-3,-6,8,4));
+        // Augen
+        float es=Math.max(3.2f,t*0.24f), ps=Math.max(1.4f,t*0.1f);
+        g2.setColor(Color.WHITE);
+        g2.fill(new Ellipse2D.Float(t*0.12f-es/2f,-t*0.26f-es/2f,es,es));
+        g2.fill(new Ellipse2D.Float(t*0.12f-es/2f, t*0.26f-es/2f,es,es));
+        g2.setColor(Color.BLACK);
+        g2.fill(new Ellipse2D.Float(t*0.12f-ps/2f,-t*0.26f-ps/2f,ps,ps));
+        g2.fill(new Ellipse2D.Float(t*0.12f-ps/2f, t*0.26f-ps/2f,ps,ps));
+        g2.setTransform(old);
+    }
+
+    private void drawFoodMp(Graphics2D g2, double time) {
+        if (mpFood == null) return;
+        int t=getTileSize(), bx=getOffsetX(), by=getOffsetY();
+        int x=bx+mpFood[0]*t, y=by+mpFood[1]*t;
+        float bob=(float)Math.sin(time*3.0+mpFood[0]*0.7+mpFood[1]*0.4)*Math.max(1f,t*0.08f);
+        Graphics2D gf=(Graphics2D)g2.create(); gf.translate(0,bob);
+        gf.setColor(new Color(0,0,0,35));
+        gf.fillOval(x+t/4,y+(int)(t*0.72),t*2/3,Math.max(3,t/5));
+        FruitType ft;
+        try { ft = FruitType.valueOf(mpFruitType); } catch(Exception e) { ft = FruitType.APPLE; }
+        switch (ft) {
+            case APPLE -> drawApple(gf,x,y,t);
+            case PEAR  -> drawPear(gf,x,y,t);
+            case ORANGE -> drawOrange(gf,x,y,t);
+            case GRAPES -> drawGrapes(gf,x,y,t);
+            case CHERRY -> drawCherry(gf,x,y,t);
+            case GOLD_APPLE   -> drawGoldApple(gf,x,y,t,time);
+            case ROTTEN_APPLE -> drawRottenApple(gf,x,y,t,time);
+            case ROTTEN_MEAT  -> drawRottenMeat(gf,x,y,t,time);
+            case LIGHTNING    -> drawLightning(gf,x,y,t,time);
+            case ICE          -> drawIceFruit(gf,x,y,t,time);
+        }
+        gf.dispose();
+    }
+
+    private void drawMpHud(Graphics2D g2) {
+        int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), t=getTileSize();
+
+        // Spieler 1 (links)
+        SnakeColor c1 = SNAKE_COLORS[Math.min(mpMyColor, SNAKE_COLORS.length-1)];
+        int hudW=Math.max(160,t*9), hudH=Math.max(38,t*2);
+        g2.setColor(new Color(c1.outer.getRed(), c1.outer.getGreen(), c1.outer.getBlue(), 160));
+        g2.fillRoundRect(bx+8,by+8,hudW,hudH,14,14);
+        g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif",Font.BOLD,Math.max(14,t)));
+        boolean iAm1 = myPlayerId == 1;
+        String p1Label = iAm1 ? "Du: " : "Gegner: ";
+        g2.drawString(p1Label + mpScore1, bx+22, by+8+hudH/2+6);
+
+        // Spieler 2 (rechts)
+        SnakeColor c2 = SNAKE_COLORS[Math.min(mpOtherColor, SNAKE_COLORS.length-1)];
+        String p2Label = iAm1 ? "Gegner: " : "Du: ";
+        FontMetrics fm = g2.getFontMetrics();
+        String p2Str = p2Label + mpScore2;
+        int p2w = fm.stringWidth(p2Str)+32;
+        g2.setColor(new Color(c2.outer.getRed(), c2.outer.getGreen(), c2.outer.getBlue(), 160));
+        g2.fillRoundRect(bx+bw-p2w-8, by+8, p2w, hudH, 14, 14);
+        g2.setColor(Color.WHITE);
+        g2.drawString(p2Str, bx+bw-p2w, by+8+hudH/2+6);
+
+        // Effekte eigener Spieler
+        drawMpEffects(g2);
+
+        // Steuerhinweis
+        g2.setFont(new Font("SansSerif",Font.PLAIN,Math.max(11,t*2/3)));
+        g2.setColor(new Color(255,255,255,130));
+        g2.drawString("WASD / Pfeiltasten steuern",bx+12,by+getBoardHeight()-8);
+    }
+
+    private void drawMpEffects(Graphics2D g2) {
+        String effStr = (myPlayerId == 1) ? mpEff1 : mpEff2;
+        if (effStr == null || effStr.isEmpty()) return;
+        int x=getOffsetX(), y=getOffsetY()+getBoardHeight()+6;
+        int barW=120, barH=16, gap=8;
+        g2.setFont(new Font("SansSerif",Font.BOLD,11));
+        for (String eff : effStr.split(",")) {
+            if (eff.isEmpty()) continue;
+            String[] parts = eff.split(":");
+            if (parts.length < 2) continue;
+            long rem;
+            try { rem = Long.parseLong(parts[1]); } catch(NumberFormatException e) { continue; }
+            switch (parts[0]) {
+                case "SHIELD" -> { drawBar(g2,x,y,barW,barH,new Color(255,215,0),"Schutz",  rem/10_000f); x+=barW+gap; }
+                case "FLIP"   -> { drawBar(g2,x,y,barW,barH,new Color(160,50,200),"Invertiert",rem/8_000f); x+=barW+gap; }
+                case "SPEED"  -> { drawBar(g2,x,y,barW,barH,new Color(255,220,0),"Speed",   rem/6_000f); x+=barW+gap; }
+                case "FREEZE" -> { drawBar(g2,x,y,barW,barH,new Color(100,200,255),"Freeze", rem/5_000f); x+=barW+gap; }
+            }
+        }
+    }
+
+    private void drawMpGameOver(Graphics2D g2) {
+        int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
+        g2.setColor(new Color(0,0,0,130)); g2.fillRect(bx,by,bw,bh);
+        int boxW=Math.min(360,bw-40), boxH=160;
+        int boxX=bx+(bw-boxW)/2, boxY=by+(bh-boxH)/2;
+        g2.setColor(new Color(28,36,28,230)); g2.fillRoundRect(boxX,boxY,boxW,boxH,28,28);
+        g2.setColor(new Color(255,255,255,30)); g2.drawRoundRect(boxX,boxY,boxW,boxH,28,28);
+
+        String title;
+        if (mpWinner.equals("DRAW")) title = "UNENTSCHIEDEN";
+        else {
+            boolean iWon = (myPlayerId == 1 && mpWinner.equals("1")) || (myPlayerId == 2 && mpWinner.equals("2"));
+            title = iWon ? "DU GEWINNST!" : "DU VERLIERST!";
+        }
+        g2.setColor(mpWinner.equals("DRAW") ? Color.YELLOW : (title.startsWith("DU G") ? new Color(100,255,100) : new Color(255,100,100)));
+        g2.setFont(new Font("SansSerif",Font.BOLD,28));
+        FontMetrics fm=g2.getFontMetrics();
+        g2.drawString(title, bx+(bw-fm.stringWidth(title))/2, boxY+52);
+
+        g2.setColor(new Color(200,200,200)); g2.setFont(new Font("SansSerif",Font.PLAIN,14)); fm=g2.getFontMetrics();
+        String sub = "Score: " + mpScore1 + " – " + mpScore2;
+        g2.drawString(sub, bx+(bw-fm.stringWidth(sub))/2, boxY+82);
+
+        g2.setColor(new Color(130,230,130)); g2.setFont(new Font("SansSerif",Font.BOLD,13)); fm=g2.getFontMetrics();
+        String restart;
+        if (mpState == MpState.WAITING_RESTART) restart = "Warte auf anderen Spieler...";
+        else restart = "R = Neustart (beide Spieler müssen bestätigen)";
+        g2.drawString(restart, bx+(bw-fm.stringWidth(restart))/2, boxY+116);
     }
 
     private void layoutSettingsPanel() {
@@ -312,41 +723,25 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         return Math.max(0f, Math.min((System.currentTimeMillis()-lastMoveTime)/(float)moveDelayMs, 1f));
     }
 
-    // ── Lobby-Overlay (Spielfeld-Mitte) ───────────────────────────────────────
+    // ── Lobby-Overlay ─────────────────────────────────────────────────────────
     private void drawLobbyOverlay(Graphics2D g2) {
         int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
-
-        // Sanftes Dimm-Overlay über dem Spielfeld
-        g2.setColor(new Color(0,0,0,60));
-        g2.fillRect(bx, by, bw, bh);
-
-        // Zentrales Info-Panel
+        g2.setColor(new Color(0,0,0,60)); g2.fillRect(bx, by, bw, bh);
         int boxW=Math.min(340, bw-40), boxH=140;
         int boxX=bx+(bw-boxW)/2, boxY=by+(bh-boxH)/2;
-        g2.setColor(new Color(20,28,22,230));
-        g2.fillRoundRect(boxX, boxY, boxW, boxH, 28, 28);
-        g2.setColor(new Color(255,255,255,30));
-        g2.drawRoundRect(boxX, boxY, boxW, boxH, 28, 28);
-
-        g2.setColor(Color.WHITE);
-        g2.setFont(new Font("SansSerif", Font.BOLD, 30));
-        FontMetrics fm=g2.getFontMetrics();
-        String title="SNAKE";
+        g2.setColor(new Color(20,28,22,230)); g2.fillRoundRect(boxX, boxY, boxW, boxH, 28, 28);
+        g2.setColor(new Color(255,255,255,30)); g2.drawRoundRect(boxX, boxY, boxW, boxH, 28, 28);
+        g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif", Font.BOLD, 30));
+        FontMetrics fm=g2.getFontMetrics(); String title="SNAKE";
         g2.drawString(title, bx+(bw-fm.stringWidth(title))/2, boxY+46);
-
-        g2.setFont(new Font("SansSerif", Font.PLAIN, 15));
-        fm=g2.getFontMetrics();
+        g2.setFont(new Font("SansSerif", Font.PLAIN, 15)); fm=g2.getFontMetrics();
         String sub="Einstellungen links & rechts wählen,";
         g2.setColor(new Color(200,200,200));
         g2.drawString(sub, bx+(bw-fm.stringWidth(sub))/2, boxY+76);
-
-        g2.setFont(new Font("SansSerif", Font.BOLD, 15));
-        fm=g2.getFontMetrics();
+        g2.setFont(new Font("SansSerif", Font.BOLD, 15)); fm=g2.getFontMetrics();
         String start="dann ENTER oder SPACE zum Starten";
         g2.setColor(new Color(130,230,130));
         g2.drawString(start, bx+(bw-fm.stringWidth(start))/2, boxY+102);
-
-        // Pulsierender Rand
         double pulse = 0.5+0.5*Math.sin(System.currentTimeMillis()/400.0);
         g2.setColor(new Color(100,200,100,(int)(60+80*pulse)));
         g2.setStroke(new BasicStroke(2f));
@@ -355,15 +750,13 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
 
     // ── Hintergrund ──────────────────────────────────────────────────────────
     private void drawBackground(Graphics2D g2, double time) {
-        g2.setColor(new Color(30,30,40));
-        g2.fillRect(0,0,getWidth(),getHeight());
-
+        g2.setColor(new Color(30,30,40)); g2.fillRect(0,0,getWidth(),getHeight());
         int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
-        Color top    = freezeActive ? new Color(120,190,240) : new Color(155,223,124);
-        Color bottom = freezeActive ? new Color( 70,130,190) : new Color( 86,156, 74);
+        boolean frozen = multiplayerMode ? mpEff1.contains("FREEZE") || mpEff2.contains("FREEZE") : freezeActive;
+        Color top    = frozen ? new Color(120,190,240) : new Color(155,223,124);
+        Color bottom = frozen ? new Color( 70,130,190) : new Color( 86,156, 74);
         g2.setPaint(new GradientPaint(bx,by,top,bx,by+bh,bottom));
         g2.fillRect(bx,by,bw,bh);
-
         g2.setColor(new Color(255,255,255,20));
         for (int i=0;i<12;i++) {
             int s=90+pseudo(i*11)%180;
@@ -383,66 +776,33 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     }
     private int pseudo(int s) { return Math.abs(s*1103515245+12345); }
 
-    // =========================================================================
-    //  SCHLANGE MIT SAUBEREM WRAP-RENDERING
-    //
-    //  Ansatz: Die Schlange wird bis zu 3x gezeichnet – einmal an der normalen
-    //  Position, und einmal (oder zweimal bei Ecken) als "Geist"-Kopie versetzt
-    //  um eine ganze Board-Breite/-Höhe. Ein Clip-Rect auf das Spielfeld sorgt
-    //  dafür, dass nur der sichtbare Teil erscheint. So gleitet der Körper
-    //  flüssig über den Rand, ohne jemals quer durch den Bildschirm zu ziehen.
-    // =========================================================================
+    // ── Snake Single-Player Rendering (unverändert) ──────────────────────────
     private void drawSnakeWrapped(Graphics2D g2, float progress, double time) {
         int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
-
-        // Clip auf das Spielfeld setzen – alles außerhalb wird nicht gezeichnet
-        Shape oldClip = g2.getClip();
-        g2.setClip(bx, by, bw, bh);
-
-        // Einfache, unveränderliche Interpolation für jeden Punkt
+        Shape oldClip = g2.getClip(); g2.setClip(bx, by, bw, bh);
         List<RenderPoint> basePts = getInterpolatedCenters(progress);
-
-        // Slither-Wellen
         List<RenderPoint> pts = applySlither(basePts, time);
-
-        // Haupt-Zeichnung (normale Position)
         drawSnakeAtOffset(g2, pts, time, 0, 0);
-
-        // Geist-Kopien für Wrap-Bereiche:
-        // Wenn sich der Kopf nahe am Rand befindet, erscheint der Körper
-        // von der anderen Seite. Wir zeichnen die Schlange zusätzlich
-        // versetzt um ±boardWidth und/oder ±boardHeight.
         RenderPoint headPt = pts.isEmpty() ? null : pts.get(0);
         if (headPt != null) {
-            float relX = (headPt.x - bx) / (float)bw;   // 0..1
+            float relX = (headPt.x - bx) / (float)bw;
             float relY = (headPt.y - by) / (float)bh;
-
-            // Horizontaler Wrap
             if (relX < 0.25f)  drawSnakeAtOffset(g2, pts, time,  bw, 0);
             if (relX > 0.75f)  drawSnakeAtOffset(g2, pts, time, -bw, 0);
-            // Vertikaler Wrap
             if (relY < 0.25f)  drawSnakeAtOffset(g2, pts, time, 0,  bh);
             if (relY > 0.75f)  drawSnakeAtOffset(g2, pts, time, 0, -bh);
-            // Diagonale Ecken
             if (relX < 0.25f && relY < 0.25f) drawSnakeAtOffset(g2, pts, time,  bw,  bh);
             if (relX > 0.75f && relY < 0.25f) drawSnakeAtOffset(g2, pts, time, -bw,  bh);
             if (relX < 0.25f && relY > 0.75f) drawSnakeAtOffset(g2, pts, time,  bw, -bh);
             if (relX > 0.75f && relY > 0.75f) drawSnakeAtOffset(g2, pts, time, -bw, -bh);
         }
-
         g2.setClip(oldClip);
     }
 
-    /**
-     * Interpoliert die Schlangenmittelpunkte linear – kein Wrap-Sonderfall nötig,
-     * da das Clip-Rect den sichtbaren Bereich begrenzt.
-     */
     private List<RenderPoint> getInterpolatedCenters(float progress) {
         int ts=getTileSize(), bx=getOffsetX(), by=getOffsetY();
         List<RenderPoint> pts = new ArrayList<>();
         for (SnakeSegment s : snake) {
-            // Bei Wrap-Sprüngen: einfach normal interpolieren.
-            // Der Pfad geht kurz außerhalb des Boards – der Clip macht ihn unsichtbar.
             float gx = lerp(s.prevGridX, s.gridX, progress);
             float gy = lerp(s.prevGridY, s.gridY, progress);
             pts.add(new RenderPoint(bx+gx*ts+ts/2f, by+gy*ts+ts/2f));
@@ -450,7 +810,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         return pts;
     }
 
-    /** Wendet Schlängelwellen auf die Punktliste an. */
     private List<RenderPoint> applySlither(List<RenderPoint> base, double time) {
         List<RenderPoint> out = new ArrayList<>();
         for (int i=0; i<base.size(); i++) {
@@ -467,26 +826,17 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         return out;
     }
 
-    /** Zeichnet die vollständige Schlange mit einem Pixel-Offset (für Geist-Kopien). */
     private void drawSnakeAtOffset(Graphics2D g2, List<RenderPoint> pts, double time, int offX, int offY) {
         if (pts.isEmpty()) return;
-
-        // Punkte verschieben
         List<RenderPoint> shifted = new ArrayList<>();
         for (RenderPoint p : pts) shifted.add(new RenderPoint(p.x+offX, p.y+offY));
-
         int t = getTileSize();
         Path2D.Float path = buildSmoothPath(shifted);
-
-        // Schatten
         AffineTransform old = g2.getTransform();
         g2.translate(Math.max(2,t*0.15), Math.max(3,t*0.2));
         g2.setColor(new Color(0,0,0,50));
         g2.setStroke(new BasicStroke(Math.max(8f,t*0.95f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
-        g2.draw(path);
-        g2.setTransform(old);
-
-        // Glow-Effekte
+        g2.draw(path); g2.setTransform(old);
         SnakeColor c=col();
         if (shieldActive) {
             g2.setColor(new Color(255,215,0,60));
@@ -498,16 +848,12 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             g2.setStroke(new BasicStroke(Math.max(10f,t*1.05f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
             g2.draw(path);
         }
-
-        // Körper
         g2.setColor(c.outer);
         g2.setStroke(new BasicStroke(Math.max(7f,t*0.85f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
         g2.draw(path);
         g2.setColor(c.inner);
         g2.setStroke(new BasicStroke(Math.max(4f,t*0.5f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
         g2.draw(path);
-
-        // Muster
         for (int i=1; i<shifted.size(); i++) {
             RenderPoint p=shifted.get(i);
             float r=Math.max(2.8f,t*0.33f-i*0.08f);
@@ -518,8 +864,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
                 g2.fill(new Ellipse2D.Float(p.x-r*0.65f,p.y-r*0.1f,r*1.25f,r*0.85f));
             }
         }
-
-        // Kopf
         drawSnakeHead(g2, shifted, time);
     }
 
@@ -537,7 +881,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     }
 
     private float lerp(int a, int b, float t) { return a+(b-a)*t; }
-
     private SnakeColor col() { return SNAKE_COLORS[selectedColorIndex]; }
 
     private void drawSnakeHead(Graphics2D g2, List<RenderPoint> pts, double time) {
@@ -548,7 +891,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         AffineTransform old=g2.getTransform();
         g2.translate(head.x, head.y);
         g2.rotate(currentDirection.angle());
-
         SnakeColor c=col();
         g2.setColor(new Color(0,0,0,40));
         g2.fill(new Ellipse2D.Float(-headW/2f+2,-headH/2f+3,headW,headH));
@@ -601,7 +943,45 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     }
     private boolean isTongueOut(double t) { double c=t%2.8; return c>0.10&&c<0.34; }
 
-    // ── Effekt-Overlays ───────────────────────────────────────────────────────
+    // ── HUD Single-Player ─────────────────────────────────────────────────────
+    private void drawHud(Graphics2D g2) {
+        int bx=getOffsetX(),by=getOffsetY(),bw=getBoardWidth(),t=getTileSize();
+        int hudW=Math.max(145,t*8), hudH=Math.max(38,t*2);
+        g2.setColor(new Color(20,28,20,145)); g2.fillRoundRect(bx+12,by+12,hudW,hudH,18,18);
+        g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif",Font.BOLD,Math.max(16,t)));
+        g2.drawString("Score: "+score, bx+28, by+12+hudH/2+6);
+        if (chaosMode) {
+            String badge="CHAOS"; g2.setFont(new Font("SansSerif",Font.BOLD,Math.max(12,t*3/4)));
+            FontMetrics fm=g2.getFontMetrics();
+            int bw2=fm.stringWidth(badge)+16, bh2=Math.max(24,t+4);
+            int bxr=bx+bw-bw2-12, byr=by+12;
+            g2.setColor(new Color(180,50,200,160)); g2.fillRoundRect(bxr,byr,bw2,bh2,12,12);
+            g2.setColor(Color.WHITE); g2.drawString(badge,bxr+8,byr+bh2/2+5);
+        }
+        g2.setFont(new Font("SansSerif",Font.PLAIN,Math.max(11,t*2/3)));
+        g2.setColor(new Color(255,255,255,130));
+        g2.drawString("SPACE pause  •  R restart",bx+12,by+getBoardHeight()-8);
+    }
+
+    private void drawCenteredOverlay(Graphics2D g2, String title, String subtitle) {
+        int bx=getOffsetX(),by=getOffsetY(),bw=getBoardWidth(),bh=getBoardHeight();
+        g2.setColor(new Color(0,0,0,130)); g2.fillRect(bx,by,bw,bh);
+        int boxW=Math.min(340,bw-40),boxH=140,boxX=bx+(bw-boxW)/2,boxY=by+(bh-boxH)/2;
+        g2.setColor(new Color(28,36,28,230)); g2.fillRoundRect(boxX,boxY,boxW,boxH,28,28);
+        g2.setColor(new Color(255,255,255,30)); g2.drawRoundRect(boxX,boxY,boxW,boxH,28,28);
+        g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif",Font.BOLD,30));
+        FontMetrics fm=g2.getFontMetrics();
+        g2.drawString(title, bx+(bw-fm.stringWidth(title))/2, boxY+48);
+        g2.setFont(new Font("SansSerif",Font.PLAIN,14)); fm=g2.getFontMetrics();
+        g2.setColor(new Color(200,200,200));
+        g2.drawString(subtitle, bx+(bw-fm.stringWidth(subtitle))/2, boxY+78);
+        g2.setFont(new Font("SansSerif",Font.PLAIN,12)); fm=g2.getFontMetrics();
+        String hint="Einstellungen links & rechts verfügbar";
+        g2.setColor(new Color(150,200,150));
+        g2.drawString(hint, bx+(bw-fm.stringWidth(hint))/2, boxY+106);
+    }
+
+    // ── Effekt-Overlays Single-Player ─────────────────────────────────────────
     private void drawEffectOverlays(Graphics2D g2) {
         long now=System.currentTimeMillis();
         int x=getOffsetX(), y=getOffsetY()+getBoardHeight()+6;
@@ -612,6 +992,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         if (speedBoost)      { drawBar(g2,x,y,barW,barH,new Color(255,220,0),  "Speed",     (speedEndTime    -now)/ 6_000f); x+=barW+gap; }
         if (freezeActive)    { drawBar(g2,x,y,barW,barH,new Color(100,200,255),"Freeze",    (freezeEndTime   -now)/ 5_000f); }
     }
+
     private void drawBar(Graphics2D g2,int x,int y,int w,int h,Color c,String lbl,float rem) {
         g2.setColor(new Color(0,0,0,100)); g2.fillRoundRect(x,y,w,h,8,8);
         g2.setColor(c); g2.fillRoundRect(x,y,(int)(w*Math.max(0,rem)),h,8,8);
@@ -620,8 +1001,9 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g2.drawString(lbl, x+(w-fm.stringWidth(lbl))/2, y+h-3);
     }
 
-    // ── Futter ────────────────────────────────────────────────────────────────
+    // ── Futter Single-Player ──────────────────────────────────────────────────
     private void drawFood(Graphics2D g2, double time) {
+        if (foodGrid == null) return;
         int t=getTileSize(), bx=getOffsetX(), by=getOffsetY();
         int x=bx+foodGrid.x*t, y=by+foodGrid.y*t;
         float bob=(float)Math.sin(time*3.0+foodGrid.x*0.7+foodGrid.y*0.4)*Math.max(1f,t*0.08f);
@@ -715,48 +1097,13 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g.fillOval(cx+r/2-gs/2,cy-r/2-gs/2,gs,gs); g.fillOval(cx-r*2/3,cy+r/4,gs,gs);
     }
 
-    // ── HUD ───────────────────────────────────────────────────────────────────
-    private void drawHud(Graphics2D g2) {
-        int bx=getOffsetX(),by=getOffsetY(),bw=getBoardWidth(),t=getTileSize();
-        int hudW=Math.max(145,t*8), hudH=Math.max(38,t*2);
-        g2.setColor(new Color(20,28,20,145)); g2.fillRoundRect(bx+12,by+12,hudW,hudH,18,18);
-        g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif",Font.BOLD,Math.max(16,t)));
-        g2.drawString("Score: "+score, bx+28, by+12+hudH/2+6);
-        if (chaosMode) {
-            String badge="CHAOS"; g2.setFont(new Font("SansSerif",Font.BOLD,Math.max(12,t*3/4)));
-            FontMetrics fm=g2.getFontMetrics();
-            int bw2=fm.stringWidth(badge)+16, bh2=Math.max(24,t+4);
-            int bxr=bx+bw-bw2-12, byr=by+12;
-            g2.setColor(new Color(180,50,200,160)); g2.fillRoundRect(bxr,byr,bw2,bh2,12,12);
-            g2.setColor(Color.WHITE); g2.drawString(badge,bxr+8,byr+bh2/2+5);
-        }
-        g2.setFont(new Font("SansSerif",Font.PLAIN,Math.max(11,t*2/3)));
-        g2.setColor(new Color(255,255,255,130));
-        g2.drawString("SPACE pause  •  R restart",bx+12,by+getBoardHeight()-8);
-    }
-
-    private void drawCenteredOverlay(Graphics2D g2, String title, String subtitle) {
-        int bx=getOffsetX(),by=getOffsetY(),bw=getBoardWidth(),bh=getBoardHeight();
-        g2.setColor(new Color(0,0,0,130)); g2.fillRect(bx,by,bw,bh);
-        int boxW=Math.min(340,bw-40),boxH=140,boxX=bx+(bw-boxW)/2,boxY=by+(bh-boxH)/2;
-        g2.setColor(new Color(28,36,28,230)); g2.fillRoundRect(boxX,boxY,boxW,boxH,28,28);
-        g2.setColor(new Color(255,255,255,30)); g2.drawRoundRect(boxX,boxY,boxW,boxH,28,28);
-        g2.setColor(Color.WHITE); g2.setFont(new Font("SansSerif",Font.BOLD,30));
-        FontMetrics fm=g2.getFontMetrics();
-        g2.drawString(title, bx+(bw-fm.stringWidth(title))/2, boxY+48);
-        g2.setFont(new Font("SansSerif",Font.PLAIN,14)); fm=g2.getFontMetrics();
-        g2.setColor(new Color(200,200,200));
-        g2.drawString(subtitle, bx+(bw-fm.stringWidth(subtitle))/2, boxY+78);
-        // Einstellungs-Hinweis
-        g2.setFont(new Font("SansSerif",Font.PLAIN,12)); fm=g2.getFontMetrics();
-        String hint="Einstellungen links & rechts verfügbar";
-        g2.setColor(new Color(150,200,150));
-        g2.drawString(hint, bx+(bw-fm.stringWidth(hint))/2, boxY+106);
-    }
-
     // ===== Input =====
     @Override
     public void keyPressed(KeyEvent e) {
+        if (multiplayerMode) {
+            handleMpKey(e);
+            return;
+        }
         switch (e.getKeyCode()) {
             case KeyEvent.VK_UP,    KeyEvent.VK_W -> {
                 if (gameState==GameState.RUNNING && currentDirection!=Direction.DOWN) nextDirection=Direction.UP;
@@ -771,7 +1118,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
                 if (gameState==GameState.RUNNING && currentDirection!=Direction.LEFT)  nextDirection=Direction.RIGHT;
             }
             case KeyEvent.VK_SPACE -> {
-                if (gameState==GameState.LOBBY)     startGame();
+                if (gameState==GameState.LOBBY)        startGame();
                 else if (gameState==GameState.RUNNING) { gameState=GameState.PAUSED; }
                 else if (gameState==GameState.PAUSED)  { gameState=GameState.RUNNING; }
             }
@@ -781,14 +1128,31 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             case KeyEvent.VK_R -> startGame();
         }
     }
+
+    private void handleMpKey(KeyEvent e) {
+        if (mpOut == null) return;
+        switch (e.getKeyCode()) {
+            case KeyEvent.VK_UP,    KeyEvent.VK_W -> mpOut.println("DIR:UP");
+            case KeyEvent.VK_DOWN,  KeyEvent.VK_S -> mpOut.println("DIR:DOWN");
+            case KeyEvent.VK_LEFT,  KeyEvent.VK_A -> mpOut.println("DIR:LEFT");
+            case KeyEvent.VK_RIGHT, KeyEvent.VK_D -> mpOut.println("DIR:RIGHT");
+            case KeyEvent.VK_R -> {
+                if (mpState == MpState.GAME_OVER) mpOut.println("RESTART");
+            }
+        }
+    }
+
     @Override public void keyReleased(KeyEvent e) {}
     @Override public void keyTyped(KeyEvent e)    {}
 
-    // ===== Getter/Setter für Settings =====
+    // ===== Getter/Setter =====
     public int  getSelectedColorIndex()      { return selectedColorIndex; }
     public void setSelectedColorIndex(int i) { selectedColorIndex=i; repaint(); }
 
-    // ===== Main =====
+    /** Setzt Multiplayer-Spieler-ID (1 oder 2) – wird vom Wrapper gesetzt. */
+    public void setMyPlayerId(int id) { this.myPlayerId = id; }
+
+    // ===== Main (Single-Player Test) =====
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             JFrame f = new JFrame("Modern Snake");
@@ -930,13 +1294,13 @@ class SettingsPanel extends JPanel {
         FontMetrics fm=g2.getFontMetrics(); String title="Spielmodus";
         g2.drawString(title, r.x+(r.width-fm.stringWidth(title))/2, r.y+24);
         g2.setFont(new Font("SansSerif",Font.PLAIN,10)); g2.setColor(new Color(160,160,160));
-        String desc=chaosMode?"Spezialfruchte aktiv!":"Klassisches Snake"; fm=g2.getFontMetrics();
+        String desc=chaosMode?"Spezialfrüchte aktiv!":"Klassisches Snake"; fm=g2.getFontMetrics();
         g2.drawString(desc, r.x+(r.width-fm.stringWidth(desc))/2, r.y+40);
         drawModeIcon(g2,r);
         drawModeButton(g2, r.x+12, r.y+90,  r.width-24, 36, "Normal", !chaosMode, new Color(50,160,80));
         drawModeButton(g2, r.x+12, r.y+134, r.width-24, 36, "Chaos",   chaosMode, new Color(160,50,200));
         g2.setFont(new Font("SansSerif",Font.PLAIN,9)); g2.setColor(new Color(120,120,120));
-        String hint="Gilt ab nachstem Start"; fm=g2.getFontMetrics();
+        String hint="Gilt ab nächstem Start"; fm=g2.getFontMetrics();
         g2.drawString(hint, r.x+(r.width-fm.stringWidth(hint))/2, r.y+r.height-10);
     }
 

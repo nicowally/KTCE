@@ -173,6 +173,9 @@ public class SnakeModernWrapper {
             statusLabel.setText("Starte Server auf Port 54321 ...");
             new Thread(() -> {
                 try {
+                    // Windows-Firewall-Regel automatisch hinzufügen (einmalig, braucht Admin-Rechte)
+                    tryAddFirewallRule();
+
                     // Server in Hintergrund-Thread starten
                     gamehub.games.snake_new.Snakeserver server =
                             new gamehub.games.snake_new.Snakeserver();
@@ -264,6 +267,38 @@ public class SnakeModernWrapper {
     }
 
     // ── Helper ────────────────────────────────────────────────────────────────
+    /**
+     * Versucht eine Windows-Firewall-Regel für Port 54321 hinzuzufügen.
+     * Schlägt still fehl wenn keine Admin-Rechte vorhanden sind oder kein Windows-System.
+     * Auf Linux/Mac ist keine Aktion nötig (Ports sind standardmäßig offen).
+     */
+    private static void tryAddFirewallRule() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (!os.contains("win")) return; // Nur auf Windows nötig
+        try {
+            // Prüfen ob Regel schon existiert
+            Process check = Runtime.getRuntime().exec(new String[]{
+                    "netsh", "advfirewall", "firewall", "show", "rule", "name=SnakeMultiplayer"
+            });
+            check.waitFor();
+            if (check.exitValue() == 0) return; // Regel existiert bereits
+
+            // Neue Regel hinzufügen
+            Runtime.getRuntime().exec(new String[]{
+                    "netsh", "advfirewall", "firewall", "add", "rule",
+                    "name=SnakeMultiplayer",
+                    "dir=in",
+                    "action=allow",
+                    "protocol=TCP",
+                    "localport=54321"
+            });
+            System.out.println("[Server] Firewall-Regel für Port 54321 hinzugefügt.");
+        } catch (Exception ex) {
+            System.out.println("[Server] Firewall-Regel konnte nicht gesetzt werden: " + ex.getMessage());
+            System.out.println("[Server] Bitte Port 54321 TCP manuell in der Windows-Firewall freigeben.");
+        }
+    }
+
     private static String getLocalIp() {
         try {
             java.net.InetAddress addr = java.net.InetAddress.getLocalHost();

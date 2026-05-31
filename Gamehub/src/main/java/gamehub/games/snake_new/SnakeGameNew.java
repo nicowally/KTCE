@@ -104,7 +104,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
 
     // ===== Konstruktor =====
     public SnakeGameNew() {
-        setPreferredSize(new Dimension(1100, 800));
+        setPreferredSize(new Dimension(1280, 800));
         setFocusable(true);
         addKeyListener(this);
 
@@ -767,7 +767,8 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
 
     private void layoutSettingsPanel() {
         int boardY=getOffsetY(), boardH=getBoardHeight(), sideW=getOffsetX();
-        if (sideW<80) return;
+        // Karten immer anzeigen, auch wenn wenig Seitenplatz vorhanden ist
+        if (sideW < 30) return;
         int pw=getWidth(), ph=boardH;
         if (settingsPanel.getBounds().width!=pw || settingsPanel.getBounds().height!=ph
                 || settingsPanel.getBounds().y!=boardY)
@@ -1295,13 +1296,26 @@ class SettingsPanel extends JPanel {
 
     private Rectangle getLeftCardBounds() {
         int bx=getBoardX();
-        if (bx < CARD_W+PADDING*2) return null;
-        return new Rectangle((bx-CARD_W)/2, (getHeight()-CARD_H)/2, CARD_W, CARD_H);
+        if (bx >= CARD_W+PADDING*2) {
+            // Genug Platz seitlich links
+            return new Rectangle((bx-CARD_W)/2, (getHeight()-CARD_H)/2, CARD_W, CARD_H);
+        }
+        // Fallback: kleine Karte links über dem Spielfeld eingeblendet
+        int cw = Math.min(CARD_W, Math.max(120, bx-8));
+        if (cw < 80) return null; // wirklich kein Platz
+        return new Rectangle(4, (getHeight()-CARD_H)/2, cw, CARD_H);
     }
+
     private Rectangle getRightCardBounds() {
         int bx=getBoardX(), bw=getBoardWidth(), ra=getWidth()-bx-bw;
-        if (ra < CARD_W+PADDING*2) return null;
-        return new Rectangle(bx+bw+(ra-CARD_W)/2, (getHeight()-CARD_H)/2, CARD_W, CARD_H);
+        if (ra >= CARD_W+PADDING*2) {
+            // Genug Platz seitlich rechts
+            return new Rectangle(bx+bw+(ra-CARD_W)/2, (getHeight()-CARD_H)/2, CARD_W, CARD_H);
+        }
+        // Fallback: kleine Karte rechts über dem Spielfeld eingeblendet
+        int cw = Math.min(CARD_W, Math.max(120, ra-8));
+        if (cw < 80) return null; // wirklich kein Platz
+        return new Rectangle(getWidth()-cw-4, (getHeight()-CARD_H)/2, cw, CARD_H);
     }
     private int getBoardX() {
         int ts=Math.max(1,Math.min(getWidth()/SnakeGameNew.GRID_WIDTH,getHeight()/SnakeGameNew.GRID_HEIGHT));

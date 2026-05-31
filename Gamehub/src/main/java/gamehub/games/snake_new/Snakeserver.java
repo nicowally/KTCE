@@ -5,30 +5,7 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/**
- * SnakeServer – läuft auf einem PC und verwaltet das gesamte Spielgeschehen.
- *
- * Protokoll (Textzeilen via PrintWriter / BufferedReader):
- *   Client → Server:  DIR:<UP|DOWN|LEFT|RIGHT>
- *                     READY
- *                     RESTART
- *   Server → Client:  WAITING          (warte auf zweiten Spieler)
- *                     START:<p1Color>:<p2Color>
- *                     STATE:<json>      (jedes Tick)
- *                     GAMEOVER:<winner> (winner = 1 | 2 | DRAW)
- *
- * State-JSON (kompakt):
- *   {
- *     "s1":[[x,y],...],   // Schlange 1 Segmente
- *     "s2":[[x,y],...],   // Schlange 2 Segmente
- *     "f":[fx,fy],        // Futter
- *     "ft":"APPLE",       // FruitType
- *     "sc1":0,            // Score Spieler 1
- *     "sc2":0,            // Score Spieler 2
- *     "eff1":"",          // Aktive Effekte Spieler 1 (kommasepariert)
- *     "eff2":""           // Aktive Effekte Spieler 2
- *   }
- */
+
 public class Snakeserver {
 
     public static final int DEFAULT_PORT = 54321;
@@ -256,7 +233,7 @@ public class Snakeserver {
                 case GOLD_APPLE   -> { shield1=true; shieldEnd1=now+10_000; }
                 case ROTTEN_APPLE -> { flip1=true;   flipEnd1  =now+ 8_000; }
                 case LIGHTNING    -> { speed1=true; moveDelay1=MOVE_DELAY_MS/2; speedEnd1=now+6_000; }
-                case ICE          -> { freeze1=true; freezeEnd1=now+5_000; }
+                case ICE          -> { freeze2=true; freezeEnd2=now+5_000; } // friert GEGNER (P2) ein
                 default -> {}
             }
         } else {
@@ -264,7 +241,7 @@ public class Snakeserver {
                 case GOLD_APPLE   -> { shield2=true; shieldEnd2=now+10_000; }
                 case ROTTEN_APPLE -> { flip2=true;   flipEnd2  =now+ 8_000; }
                 case LIGHTNING    -> { speed2=true; moveDelay2=MOVE_DELAY_MS/2; speedEnd2=now+6_000; }
-                case ICE          -> { freeze2=true; freezeEnd2=now+5_000; }
+                case ICE          -> { freeze1=true; freezeEnd1=now+5_000; } // friert GEGNER (P1) ein
                 default -> {}
             }
         }
@@ -404,13 +381,26 @@ public class Snakeserver {
                 } catch (IllegalArgumentException ignored) {}
             } else if (msg.equals("RESTART")) {
                 if (phase == GamePhase.GAME_OVER) {
-                    restartVotes++;
-                    if (restartVotes >= 2) {
-                        restartVotes = 0;
-                        restartGame();
+                    if (playerId == 1) {
+                        host1ReadyForRestart = true;
+                        // Host sendet RESTART → Settings-Phase für beide öffnen
+                        // Beitreter bekommt RESTART_LOBBY damit er Farbe wählen kann
+                        handler2.send("RESTART_LOBBY");
+                        send("RESTART_LOBBY_HOST");
                     } else {
-                        send("WAITING_RESTART");
+                        guest2ReadyForRestart = true;
                     }
+                    // Wenn beide bereit → starten
+                    if (host1ReadyForRestart && guest2ReadyForRestart) {
+                        restartGame();
+                    }
+                }
+            } else if (msg.equals("RESTART_CONFIRM")) {
+                // Beitreter bestätigt dass er bereit ist (nach Farbwahl)
+                if (phase == GamePhase.GAME_OVER && playerId == 2) {
+                    guest2ReadyForRestart = true;
+                    if (host1ReadyForRestart) restartGame();
+                    else handler2.send("WAITING_FOR_HOST");
                 }
             } else if (msg.startsWith("COLOR:")) {
                 // Spieler wählt Farbe vor dem Start
@@ -431,10 +421,15 @@ public class Snakeserver {
     }
 
     private int restartVotes = 0;
+    private boolean host1ReadyForRestart = false;
+    private boolean guest2ReadyForRestart = false;
 
     private synchronized void restartGame() {
         initGame();
         phase = GamePhase.RUNNING;
+        host1ReadyForRestart = false;
+        guest2ReadyForRestart = false;
+        // Farben aus den zuletzt gemeldeten Werten nehmen
         handler1.send("START:" + p1ColorIndex + ":" + p2ColorIndex);
         handler2.send("START:" + p2ColorIndex + ":" + p1ColorIndex);
     }

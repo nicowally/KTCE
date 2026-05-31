@@ -10,14 +10,6 @@ import java.net.Socket;
 import java.util.*;
 import java.util.List;
 
-/**
- * SnakeGameNew – unterstützt jetzt Single-Player UND Multiplayer (Netzwerk).
- *
- * Im Multiplayer-Modus:
- *   - Verbindet sich mit einem SnakeServer (TCP).
- *   - Schickt nur Richtungseingaben, empfängt den kompletten Spielzustand.
- *   - Zeichnet beide Schlangen; die eigene Schlange wird heller dargestellt.
- */
 public class SnakeGameNew extends JPanel implements ActionListener, KeyListener {
 
     // ===== Grid =====
@@ -200,9 +192,27 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         } else if (msg.startsWith("GAMEOVER:")) {
             mpWinner = msg.substring(9);
             mpState = MpState.GAME_OVER;
+            // Settings wieder anzeigen: Host darf Farbe+Chaos, Beitreter nur Farbe
+            settingsPanel.setCanChangeChaos(myPlayerId == 1);
+            settingsPanel.setVisible(true);
         } else if (msg.equals("WAITING_RESTART")) {
             mpState = MpState.WAITING_RESTART;
             mpStatusMsg = "Warte auf anderen Spieler für Neustart...";
+        } else if (msg.equals("RESTART_LOBBY_HOST")) {
+            // Host: Settings anzeigen, kann Farbe+Chaos wählen, dann R drücken zum Bestätigen
+            mpState = MpState.GAME_OVER;
+            mpStatusMsg = "Einstellungen wählen, dann R für Neustart";
+            settingsPanel.setCanChangeChaos(true);
+            settingsPanel.setVisible(true);
+        } else if (msg.equals("RESTART_LOBBY")) {
+            // Beitreter: nur Farbe wählen, dann R drücken
+            mpState = MpState.GAME_OVER;
+            mpStatusMsg = "Farbe wählen, dann R zum Bestätigen";
+            settingsPanel.setCanChangeChaos(false);
+            settingsPanel.setVisible(true);
+        } else if (msg.equals("WAITING_FOR_HOST")) {
+            mpStatusMsg = "Warte auf Host...";
+            repaint();
         } else if (msg.startsWith("CHAOSINFO:")) {
             // Vom Host gesendeter Chaos-Wert – SettingsPanel live aktualisieren
             boolean chaos = msg.substring(10).trim().equals("1");
@@ -758,10 +768,15 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         String sub = "Score: " + mpScore1 + " – " + mpScore2;
         g2.drawString(sub, bx+(bw-fm.stringWidth(sub))/2, boxY+82);
 
-        g2.setColor(new Color(130,230,130)); g2.setFont(new Font("SansSerif",Font.BOLD,13)); fm=g2.getFontMetrics();
+        g2.setColor(new Color(130,230,130)); g2.setFont(new Font("SansSerif",Font.BOLD,12)); fm=g2.getFontMetrics();
         String restart;
-        if (mpState == MpState.WAITING_RESTART) restart = "Warte auf anderen Spieler...";
-        else restart = "R = Neustart (beide Spieler müssen bestätigen)";
+        if (mpState == MpState.WAITING_RESTART || mpStatusMsg.equals("Warte auf Host...")) {
+            restart = mpStatusMsg;
+        } else if (myPlayerId == 1) {
+            restart = "Einstellungen wählen → R = Neustart";
+        } else {
+            restart = "Farbe wählen (seitlich) → R = Bestätigen";
+        }
         g2.drawString(restart, bx+(bw-fm.stringWidth(restart))/2, boxY+116);
     }
 
@@ -1193,7 +1208,10 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             case KeyEvent.VK_LEFT,  KeyEvent.VK_A -> mpOut.println("DIR:LEFT");
             case KeyEvent.VK_RIGHT, KeyEvent.VK_D -> mpOut.println("DIR:RIGHT");
             case KeyEvent.VK_R -> {
-                if (mpState == MpState.GAME_OVER) mpOut.println("RESTART");
+                if (mpState == MpState.GAME_OVER) {
+                    if (myPlayerId == 1) mpOut.println("RESTART");
+                    else                 mpOut.println("RESTART_CONFIRM");
+                }
             }
         }
     }

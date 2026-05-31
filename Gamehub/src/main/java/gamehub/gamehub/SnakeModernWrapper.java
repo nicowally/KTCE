@@ -15,15 +15,6 @@ import javafx.scene.text.FontWeight;
 import javax.swing.SwingUtilities;
 import java.io.IOException;
 
-/**
- * SnakeModernWrapper – zeigt zuerst ein Lobby-Menü:
- *   [Einzelspieler]   [Multiplayer hosten]   [Multiplayer beitreten]
- *
- * Multiplayer hosten: Startet einen SnakeServer im Hintergrund auf Port 54321,
- *   dann verbindet sich der lokale Client damit (localhost).
- *
- * Multiplayer beitreten: IP-Eingabe → verbindet sich mit dem Host.
- */
 public class SnakeModernWrapper {
 
     public static BorderPane createSnakePane() {
@@ -186,8 +177,24 @@ public class SnakeModernWrapper {
                         }
                     }, "SnakeServer").start();
 
-                    // Kurz warten bis der Server-Socket offen ist
-                    Thread.sleep(400);
+                    // Warten bis der ServerSocket wirklich lauscht (max 5 Sekunden)
+                    boolean portOpen = false;
+                    for (int attempt = 0; attempt < 50; attempt++) {
+                        Thread.sleep(100);
+                        try (java.net.Socket test = new java.net.Socket()) {
+                            test.connect(new java.net.InetSocketAddress("localhost",
+                                    gamehub.games.snake_new.Snakeserver.DEFAULT_PORT), 200);
+                            portOpen = true;
+                            break;
+                        } catch (Exception ignored) {}
+                    }
+                    if (!portOpen) {
+                        Platform.runLater(() -> {
+                            statusLabel.setText("Server konnte nicht gestartet werden!");
+                            btnStart.setDisable(false);
+                        });
+                        return;
+                    }
 
                     Platform.runLater(() -> statusLabel.setText("Server läuft! Verbinde als Spieler 1..."));
 

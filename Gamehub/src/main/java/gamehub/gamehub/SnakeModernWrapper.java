@@ -306,35 +306,40 @@ public class SnakeModernWrapper {
             String os = System.getProperty("os.name", "").toLowerCase();
             if (!os.contains("win")) return;
 
-            // netstat -ano gibt alle Verbindungen mit PIDs aus
+            // Eigene PID ermitteln damit wir uns nicht selbst killen
+            long ownPid = ProcessHandle.current().pid();
+
             Process netstat = Runtime.getRuntime().exec(
                     new String[]{"cmd", "/c", "netstat -ano | findstr :" + port}
             );
             netstat.waitFor();
             String output = new String(netstat.getInputStream().readAllBytes());
 
-            // PID aus der letzten Spalte extrahieren
             java.util.Set<String> pids = new java.util.HashSet<>();
             for (String line : output.split("\\r?\\n")) {
                 line = line.trim();
                 if (line.isEmpty()) continue;
-                // Nur LISTENING oder ESTABLISHED Zeilen mit unserem Port
                 if (!line.contains(":" + port)) continue;
                 String[] parts = line.split("\\s+");
                 if (parts.length > 0) {
                     String pid = parts[parts.length - 1];
                     if (pid.matches("\\d+") && !pid.equals("0")) {
-                        pids.add(pid);
+                        // WICHTIG: eigene PID niemals killen
+                        if (Long.parseLong(pid) != ownPid) {
+                            pids.add(pid);
+                        } else {
+                            System.out.println("[Server] Port " + port + " wird von dieser App selbst belegt – kein Kill nötig.");
+                        }
                     }
                 }
             }
 
             for (String pid : pids) {
-                System.out.println("[Server] Beende Prozess PID " + pid + " der Port " + port + " belegt.");
+                System.out.println("[Server] Beende fremden Prozess PID " + pid + " der Port " + port + " belegt.");
                 Runtime.getRuntime().exec(new String[]{"taskkill", "/PID", pid, "/F"}).waitFor();
             }
 
-            if (!pids.isEmpty()) Thread.sleep(500); // kurz warten nach dem Kill
+            if (!pids.isEmpty()) Thread.sleep(500);
 
         } catch (Exception e) {
             System.out.println("[Server] Port-Freigabe fehlgeschlagen: " + e.getMessage());

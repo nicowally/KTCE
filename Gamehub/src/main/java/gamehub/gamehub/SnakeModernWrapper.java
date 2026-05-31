@@ -15,15 +15,6 @@ import javafx.scene.text.FontWeight;
 import javax.swing.SwingUtilities;
 import java.io.IOException;
 
-/**
- * SnakeModernWrapper – zeigt zuerst ein Lobby-Menü:
- *   [Einzelspieler]   [Multiplayer hosten]   [Multiplayer beitreten]
- *
- * Multiplayer hosten: Startet einen SnakeServer im Hintergrund auf Port 54321,
- *   dann verbindet sich der lokale Client damit (localhost).
- *
- * Multiplayer beitreten: IP-Eingabe → verbindet sich mit dem Host.
- */
 public class SnakeModernWrapper {
 
     // Letzte Server-Instanz merken damit sie beim erneuten Hosten sauber gestoppt wird

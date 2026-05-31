@@ -5,30 +5,6 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/**
- * SnakeServer – läuft auf einem PC und verwaltet das gesamte Spielgeschehen.
- *
- * Protokoll (Textzeilen via PrintWriter / BufferedReader):
- *   Client → Server:  DIR:<UP|DOWN|LEFT|RIGHT>
- *                     READY
- *                     RESTART
- *   Server → Client:  WAITING          (warte auf zweiten Spieler)
- *                     START:<p1Color>:<p2Color>
- *                     STATE:<json>      (jedes Tick)
- *                     GAMEOVER:<winner> (winner = 1 | 2 | DRAW)
- *
- * State-JSON (kompakt):
- *   {
- *     "s1":[[x,y],...],   // Schlange 1 Segmente
- *     "s2":[[x,y],...],   // Schlange 2 Segmente
- *     "f":[fx,fy],        // Futter
- *     "ft":"APPLE",       // FruitType
- *     "sc1":0,            // Score Spieler 1
- *     "sc2":0,            // Score Spieler 2
- *     "eff1":"",          // Aktive Effekte Spieler 1 (kommasepariert)
- *     "eff2":""           // Aktive Effekte Spieler 2
- *   }
- */
 public class Snakeserver {
 
     public static final int DEFAULT_PORT = 54321;

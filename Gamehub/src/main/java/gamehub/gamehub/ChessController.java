@@ -32,7 +32,7 @@ public class ChessController {
     @FXML
     private FlowPane blackCapturedBox;
     @FXML
-    private ChessBoard chessBoard;
+    public ChessBoard chessBoard;
     @FXML
     private ListView<String> moveHistoryListView;
 

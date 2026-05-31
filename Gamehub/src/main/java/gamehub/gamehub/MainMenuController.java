@@ -38,7 +38,14 @@ public class MainMenuController {
                     e.printStackTrace();
                 }
             } else if (result.get() == chessLan) {
-                System.out.println("LAN-Modus ausgewählt");
+                try {
+                    FXMLLoader loader = new FXMLLoader(
+                            GamehubApplication.class.getResource("/gamehub/gamehub/games/chess/chessLAN.fxml")
+                    );
+                    mainMenu.getScene().setRoot(loader.load());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }

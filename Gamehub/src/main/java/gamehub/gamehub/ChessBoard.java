@@ -24,6 +24,7 @@ public class ChessBoard extends GridPane {
     private ChessController controller;
     private BoardLogic logic = new BoardLogic();
     private Figure selectedFigure = null;
+    private boolean flipped = false;
 
     public ChessBoard() {
         setAlignment(javafx.geometry.Pos.CENTER);
@@ -38,24 +39,81 @@ public class ChessBoard extends GridPane {
         return logic;
     }
 
+
+    public void setFlipped(boolean flipped) {
+        this.flipped = flipped;
+        getChildren().clear();
+        draw();
+        for (Figure f : logic.getFigures()) {
+            f.setOnMouseClicked(event -> {
+                handleClick(f.col, f.row);
+                event.consume();
+            });
+            add(f, dCol(f.col) + 1, dRow(f.row));
+        }
+    }
+
+    // Rechnet logische Spalte in Grid-Spalte um
+    private int dCol(int logicCol) {
+        if (flipped) {
+            return 7 - logicCol;
+        }return logicCol;
+    }
+
+    // Rechnet logische Zeile in Grid-Zeile um
+    private int dRow(int logicRow) {
+        if (flipped) {
+            return 7 - logicRow;
+        }return logicRow;
+    }
+
     public void draw() {
         for (int row = 0; row < ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
                 Rectangle square = new Rectangle(SQUARE_SIZE, SQUARE_SIZE);
-                if ((row + col) % 2 == 0) {
+                int logicCol;
+                if (flipped) {
+                    logicCol = 7 - col;
+                } else logicCol = col;
+                int logicRow;
+                if (flipped) {
+                    logicRow = 7 - row;
+                } else logicRow = row;
+
+                if ((logicRow + logicCol) % 2 == 0) {
                     square.setFill(Color.rgb(255, 255, 255));
                 } else {
                     square.setFill(Color.rgb(78, 120, 55));
                 }
                 int c = col;
                 int r = row;
-                square.setOnMouseClicked(event -> handleClick(c, r));
-                add(square, col + 1, row); //+1 damit die Zahlen links vom Board später richtig positioniert werden
+                square.setOnMouseClicked(event -> {
+                    int clickCol;
+                    if (flipped) {
+                        clickCol = 7 - c;
+                    } else {
+                        clickCol = c;
+                    }
+
+                    int clickRow;
+                    if (flipped) {
+                        clickRow = 7 - r;
+                    } else {
+                        clickRow = r;
+                    }
+                    handleClick(clickCol, clickRow);
+                });
+                add(square, col + 1, row);
             }
         }
-        //Zahlen links vom Board
+
+        // Zahlen links vom Board
         for (int row = 0; row < ROWS; row++) {
-            Label label = new Label(String.valueOf(8 - row));
+            int number;
+            if (flipped) {
+                number = row + 1;
+            } else number = 8 - row;
+            Label label = new Label(String.valueOf(number));
             label.setFont(Font.font("System", FontWeight.BOLD, 16));
             label.setTextFill(Color.WHITE);
             label.setMinSize(30, SQUARE_SIZE);
@@ -66,7 +124,11 @@ public class ChessBoard extends GridPane {
         // Buchstaben unterhalb vom Board
         String[] letters = {"A", "B", "C", "D", "E", "F", "G", "H"};
         for (int col = 0; col < COLS; col++) {
-            Label label = new Label(letters[col]);
+            String letter;
+            if (flipped) {
+                letter = letters[7 - col];
+            } else letter = letters[col];
+            Label label = new Label(letter);
             label.setFont(Font.font("System", FontWeight.BOLD, 16));
             label.setTextFill(Color.WHITE);
             label.setMinSize(SQUARE_SIZE, 30);
@@ -79,9 +141,9 @@ public class ChessBoard extends GridPane {
         logic.addFigure(figure);
         figure.setOnMouseClicked(event -> {
             handleClick(figure.col, figure.row);
-            event.consume(); // verhindert das der Klick ans Feld weitergegeben wird
+            event.consume(); //verhindert das der Klick ans Feld weitergegeben wird
         });
-        add(figure, figure.col + 1, figure.row);
+        add(figure, dCol(figure.col) + 1, dRow(figure.row));
     }
 
     private void handleClick(int col, int row) {
@@ -138,8 +200,10 @@ public class ChessBoard extends GridPane {
     }
 
     private void highlightSquare(int col, int row, boolean highlight) {
+        int dc = dCol(col) + 1;
+        int dr = dRow(row);
         for (Node node : getChildren()) {
-            if (node instanceof Rectangle rect && GridPane.getColumnIndex(rect) == col + 1 && GridPane.getRowIndex(rect) == row) {
+            if (node instanceof Rectangle rect && GridPane.getColumnIndex(rect) == dc && GridPane.getRowIndex(rect) == dr) {
                 if (highlight) {
                     rect.setFill(Color.rgb(247, 247, 105));
                 } else {
@@ -159,15 +223,14 @@ public class ChessBoard extends GridPane {
             enPassantPawn = logic.enPassantTarget;
         }
         logic.enPassantTarget = null;
-        int oldCol = figure.col; //für Rochade
-        int oldRow = figure.row; //für enPassant
+        int oldCol = figure.col;
+        int oldRow = figure.row;
         Figure targetFigure = logic.getFigureAt(targetCol, targetRow);
         if (targetFigure != null) {
             getChildren().remove(targetFigure);
             logic.removeFigure(targetFigure);
             logic.addCapturedFigure(targetFigure);
             controller.updateCapturedFiguresUI();
-
         }
         if (enPassantPawn != null) {
             getChildren().remove(enPassantPawn);
@@ -176,8 +239,7 @@ public class ChessBoard extends GridPane {
         getChildren().remove(figure);
         figure.col = targetCol;
         figure.row = targetRow;
-        add(figure, targetCol + 1, targetRow);
-        controller.recordMove(oldCol, oldRow, targetCol, targetRow, figure.getClass().getSimpleName());
+        add(figure, dCol(targetCol) + 1, dRow(targetRow));
 
         if (figure instanceof Pawn && Math.abs(targetRow - oldRow) == 2) {
             logic.enPassantTarget = figure;
@@ -195,7 +257,9 @@ public class ChessBoard extends GridPane {
             String choice = controller.showPromotionDialog(colourCode);
             promotePawn(figure, targetCol, targetRow, choice);
         }
-        String enemyColour = null;
+        controller.recordMove(oldCol, oldRow, targetCol, targetRow, figure.getClass().getSimpleName());
+
+        String enemyColour;
         if (logic.whiteTurn) {
             enemyColour = "b";
         } else {
@@ -209,7 +273,7 @@ public class ChessBoard extends GridPane {
         }
         if (Check.isInCheck(enemyColour, getLogic())) {
             if (Check.isCheckmate(enemyColour, getLogic())) {
-                String winner = null;
+                String winner;
                 if (logic.whiteTurn) {
                     winner = "Weiß";
                 } else {
@@ -248,8 +312,8 @@ public class ChessBoard extends GridPane {
         Figure rook = logic.getFigureAt(oldCol, row);
         if (rook != null) {
             getChildren().remove(rook);
-            logic.moveRookLogic(rook, newCol, row); // BoardLogic-Werte ändern
-            add(rook, newCol + 1, row); // UI-Position ändern
+            logic.moveRookLogic(rook, newCol, row);  //BoardLogic-Werte ändern
+            add(rook, dCol(newCol) + 1, dRow(row)); //UI-Position ändern
         }
     }
 
@@ -257,7 +321,7 @@ public class ChessBoard extends GridPane {
         for (int row = 0; row < 8; row++) {
             for (int col = 0; col < 8; col++) {
                 if (figure.canMoveTo(col, row, logic)) {
-                    // Schach-Check: wäre der Zug legal?
+                    //Schach-Check: wäre der Zug legal?
                     int oldCol = figure.col;
                     int oldRow = figure.row;
                     Figure target = logic.getFigureAt(col, row);
@@ -282,12 +346,13 @@ public class ChessBoard extends GridPane {
                         dot.setId("moveDot");
                         GridPane.setHalignment(dot, HPos.CENTER);
                         GridPane.setValignment(dot, VPos.CENTER);
-                        add(dot, col + 1, row);
+                        add(dot, dCol(col) + 1, dRow(row));
                     }
                 }
             }
         }
     }
+
     private void clearPossibleMoves() {
         getChildren().removeIf(node -> "moveDot".equals(node.getId()));
     }

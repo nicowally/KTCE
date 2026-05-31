@@ -5,7 +5,30 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-
+/**
+ * SnakeServer – läuft auf einem PC und verwaltet das gesamte Spielgeschehen.
+ *
+ * Protokoll (Textzeilen via PrintWriter / BufferedReader):
+ *   Client → Server:  DIR:<UP|DOWN|LEFT|RIGHT>
+ *                     READY
+ *                     RESTART
+ *   Server → Client:  WAITING          (warte auf zweiten Spieler)
+ *                     START:<p1Color>:<p2Color>
+ *                     STATE:<json>      (jedes Tick)
+ *                     GAMEOVER:<winner> (winner = 1 | 2 | DRAW)
+ *
+ * State-JSON (kompakt):
+ *   {
+ *     "s1":[[x,y],...],   // Schlange 1 Segmente
+ *     "s2":[[x,y],...],   // Schlange 2 Segmente
+ *     "f":[fx,fy],        // Futter
+ *     "ft":"APPLE",       // FruitType
+ *     "sc1":0,            // Score Spieler 1
+ *     "sc2":0,            // Score Spieler 2
+ *     "eff1":"",          // Aktive Effekte Spieler 1 (kommasepariert)
+ *     "eff2":""           // Aktive Effekte Spieler 2
+ *   }
+ */
 public class Snakeserver {
 
     public static final int DEFAULT_PORT = 54321;
@@ -54,7 +77,22 @@ public class Snakeserver {
     private int p2ColorIndex = 2; // Rot als Standard für P2
 
     private ServerSocket serverSocket;
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private volatile boolean ready = false;  // true sobald ServerSocket lauscht
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
+        Thread t = new Thread(r, "SnakeServerLoop");
+        t.setDaemon(true);  // Wird automatisch beendet wenn JVM endet
+        return t;
+    });
+
+    /** Gibt true zurück sobald der ServerSocket gebunden ist und auf Verbindungen wartet. */
+    public boolean isReady() { return ready; }
+
+    /** Beendet den Server und gibt den Port frei. */
+    public void stop() {
+        ready = false;
+        scheduler.shutdownNow();
+        try { if (serverSocket != null && !serverSocket.isClosed()) serverSocket.close(); } catch (Exception ignored) {}
+    }
 
     public enum Direction {
         UP(0,-1), DOWN(0,1), LEFT(-1,0), RIGHT(1,0);
@@ -75,7 +113,18 @@ public class Snakeserver {
     }
 
     public void start(int port) throws IOException {
-        serverSocket = new ServerSocket(port);
+        serverSocket = new ServerSocket();
+        serverSocket.setReuseAddress(true);  // Port sofort wiederverwendbar nach Schließen
+        serverSocket.bind(new java.net.InetSocketAddress(port));
+        ready = true;  // Ab jetzt kann der Host-Client sich verbinden
+
+        // Shutdown-Hook: ServerSocket beim Programmende automatisch schließen
+        // damit der Port nicht belegt bleibt
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            stop();
+            System.out.println("[Server] Port " + port + " freigegeben.");
+        }, "SnakeServerShutdown"));
+
         System.out.println("[Server] Lauscht auf Port " + port);
         System.out.println("[Server] Warte auf 2 Spieler...");
 
@@ -137,8 +186,9 @@ public class Snakeserver {
         tickEffects(now);
 
         boolean moved1 = false, moved2 = false;
-        if (now - lastMove1 >= moveDelay1) { moveSnake(1); lastMove1 = now; moved1 = true; }
-        if (now - lastMove2 >= moveDelay2) { moveSnake(2); lastMove2 = now; moved2 = true; }
+        // Eingefrorene Schlange wird komplett übersprungen (bewegt sich nicht)
+        if (!freeze1 && now - lastMove1 >= moveDelay1) { moveSnake(1); lastMove1 = now; moved1 = true; }
+        if (!freeze2 && now - lastMove2 >= moveDelay2) { moveSnake(2); lastMove2 = now; moved2 = true; }
 
         if (moved1 || moved2) broadcastState();
     }

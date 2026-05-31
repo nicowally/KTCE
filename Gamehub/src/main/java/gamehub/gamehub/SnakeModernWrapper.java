@@ -15,7 +15,19 @@ import javafx.scene.text.FontWeight;
 import javax.swing.SwingUtilities;
 import java.io.IOException;
 
+/**
+ * SnakeModernWrapper – zeigt zuerst ein Lobby-Menü:
+ *   [Einzelspieler]   [Multiplayer hosten]   [Multiplayer beitreten]
+ *
+ * Multiplayer hosten: Startet einen SnakeServer im Hintergrund auf Port 54321,
+ *   dann verbindet sich der lokale Client damit (localhost).
+ *
+ * Multiplayer beitreten: IP-Eingabe → verbindet sich mit dem Host.
+ */
 public class SnakeModernWrapper {
+
+    // Letzte Server-Instanz merken damit sie beim erneuten Hosten sauber gestoppt wird
+    private static gamehub.games.snake_new.Snakeserver runningServer = null;
 
     public static BorderPane createSnakePane() {
         BorderPane root = new BorderPane();
@@ -28,6 +40,11 @@ public class SnakeModernWrapper {
                         "-fx-background-radius: 8; -fx-cursor: hand;"
         );
         backButton.setOnAction(e -> {
+            // Server stoppen wenn man zurück geht
+            if (runningServer != null) {
+                runningServer.stop();
+                runningServer = null;
+            }
             try {
                 FXMLLoader loader = new FXMLLoader(
                         GamehubApplication.class.getResource("main-menu.fxml")
@@ -167,28 +184,38 @@ public class SnakeModernWrapper {
                     // Windows-Firewall-Regel automatisch hinzufügen (einmalig, braucht Admin-Rechte)
                     tryAddFirewallRule();
 
+                    // Alten Server sauber beenden falls noch einer läuft
+                    if (runningServer != null) {
+                        runningServer.stop();
+                        runningServer = null;
+                        Thread.sleep(300);
+                    }
+
+                    // Auf Windows: Prozess der Port 54321 belegt automatisch beenden
+                    forceReleasePort(gamehub.games.snake_new.Snakeserver.DEFAULT_PORT);
+
                     // Server in Hintergrund-Thread starten
+                    // Wir nutzen ein Flag das der Server setzt sobald der ServerSocket offen ist
                     gamehub.games.snake_new.Snakeserver server =
                             new gamehub.games.snake_new.Snakeserver();
-                    new Thread(() -> {
+                    runningServer = server;
+                    Thread serverThread = new Thread(() -> {
                         try { server.start(gamehub.games.snake_new.Snakeserver.DEFAULT_PORT); }
                         catch (Exception ex) {
                             Platform.runLater(() -> statusLabel.setText("Server-Fehler: " + ex.getMessage()));
                         }
-                    }, "SnakeServer").start();
+                    }, "SnakeServer");
+                    serverThread.setDaemon(true);  // Automatisch beenden wenn Programm endet
+                    serverThread.start();
 
-                    // Warten bis der ServerSocket wirklich lauscht (max 5 Sekunden)
-                    boolean portOpen = false;
-                    for (int attempt = 0; attempt < 50; attempt++) {
-                        Thread.sleep(100);
-                        try (java.net.Socket test = new java.net.Socket()) {
-                            test.connect(new java.net.InetSocketAddress("localhost",
-                                    gamehub.games.snake_new.Snakeserver.DEFAULT_PORT), 200);
-                            portOpen = true;
-                            break;
-                        } catch (Exception ignored) {}
+                    // Warten bis der Server sein isReady-Flag gesetzt hat (max 5 Sekunden)
+                    // WICHTIG: Kein Test-Socket! Der würde als Spieler 1 gezählt werden.
+                    int waited = 0;
+                    while (!server.isReady() && waited < 5000) {
+                        Thread.sleep(50);
+                        waited += 50;
                     }
-                    if (!portOpen) {
+                    if (!server.isReady()) {
                         Platform.runLater(() -> {
                             statusLabel.setText("Server konnte nicht gestartet werden!");
                             btnStart.setDisable(false);
@@ -279,6 +306,50 @@ public class SnakeModernWrapper {
      * Schlägt still fehl wenn keine Admin-Rechte vorhanden sind oder kein Windows-System.
      * Auf Linux/Mac ist keine Aktion nötig (Ports sind standardmäßig offen).
      */
+    /**
+     * Findet auf Windows den Prozess der den angegebenen Port belegt und beendet ihn.
+     * Verhindert "Address already in use" beim erneuten Server-Start.
+     */
+    private static void forceReleasePort(int port) {
+        try {
+            String os = System.getProperty("os.name", "").toLowerCase();
+            if (!os.contains("win")) return;
+
+            // netstat -ano gibt alle Verbindungen mit PIDs aus
+            Process netstat = Runtime.getRuntime().exec(
+                    new String[]{"cmd", "/c", "netstat -ano | findstr :" + port}
+            );
+            netstat.waitFor();
+            String output = new String(netstat.getInputStream().readAllBytes());
+
+            // PID aus der letzten Spalte extrahieren
+            java.util.Set<String> pids = new java.util.HashSet<>();
+            for (String line : output.split("\\r?\\n")) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                // Nur LISTENING oder ESTABLISHED Zeilen mit unserem Port
+                if (!line.contains(":" + port)) continue;
+                String[] parts = line.split("\\s+");
+                if (parts.length > 0) {
+                    String pid = parts[parts.length - 1];
+                    if (pid.matches("\\d+") && !pid.equals("0")) {
+                        pids.add(pid);
+                    }
+                }
+            }
+
+            for (String pid : pids) {
+                System.out.println("[Server] Beende Prozess PID " + pid + " der Port " + port + " belegt.");
+                Runtime.getRuntime().exec(new String[]{"taskkill", "/PID", pid, "/F"}).waitFor();
+            }
+
+            if (!pids.isEmpty()) Thread.sleep(500); // kurz warten nach dem Kill
+
+        } catch (Exception e) {
+            System.out.println("[Server] Port-Freigabe fehlgeschlagen: " + e.getMessage());
+        }
+    }
+
     private static void tryAddFirewallRule() {
         String os = System.getProperty("os.name", "").toLowerCase();
         if (!os.contains("win")) return; // Nur auf Windows nötig

@@ -125,6 +125,8 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
      */
     public void connectToServer(String host, int port) {
         multiplayerMode = true;
+        // Nur der Host (playerId==1) darf Chaos-Modus wählen
+        settingsPanel.setCanChangeChaos(myPlayerId == 1);
         // SettingsPanel bleibt sichtbar während der Wartezeit, damit Farbe & Chaos gewählt werden können.
         // Es wird erst versteckt wenn START vom Server kommt.
         settingsPanel.setVisible(true);
@@ -137,9 +139,12 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
                 mpSocket = new Socket(host, port);
                 mpOut = new PrintWriter(new OutputStreamWriter(mpSocket.getOutputStream()), true);
                 mpIn  = new BufferedReader(new InputStreamReader(mpSocket.getInputStream()));
-                mpStatusMsg = "Verbunden! Warte auf zweiten Spieler...";
-                mpState = MpState.WAITING;
-                repaint();
+                // Sofort als WAITING markieren sobald TCP-Verbindung steht
+                SwingUtilities.invokeLater(() -> {
+                    mpState = MpState.WAITING;
+                    mpStatusMsg = "Verbunden! Warte auf zweiten Spieler...";
+                    repaint();
+                });
                 networkReadLoop();
             } catch (IOException e) {
                 mpStatusMsg = "Verbindungsfehler: " + e.getMessage();
@@ -198,6 +203,11 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         } else if (msg.equals("WAITING_RESTART")) {
             mpState = MpState.WAITING_RESTART;
             mpStatusMsg = "Warte auf anderen Spieler für Neustart...";
+        } else if (msg.startsWith("CHAOSINFO:")) {
+            // Vom Host gesendeter Chaos-Wert – SettingsPanel live aktualisieren
+            boolean chaos = msg.substring(10).trim().equals("1");
+            settingsPanel.setChaosMode(chaos);
+            this.chaosMode = chaos;
         }
         repaint();
     }
@@ -1235,6 +1245,8 @@ class SettingsPanel extends JPanel {
     private final SnakeGameNew game;
     private int     previewColorIndex = 0;
     private boolean chaosMode         = false;
+    /** true = Einzelspieler oder Host → darf Chaos ändern. false = Beitreter → nur lesen. */
+    private boolean canChangeChaos    = true;
 
     private static final int CARD_W  = 170;
     private static final int CARD_H  = 220;
@@ -1251,6 +1263,8 @@ class SettingsPanel extends JPanel {
     }
 
     public boolean isChaosMode() { return chaosMode; }
+    public void setCanChangeChaos(boolean v) { canChangeChaos = v; repaint(); }
+    public void setChaosMode(boolean v) { chaosMode = v; repaint(); }
 
     /** Setzt den Farbvorschau-Index von außen (z.B. bei COLORINFO vom Server). */
     public void setPreviewColorIndex(int idx) {
@@ -1272,7 +1286,7 @@ class SettingsPanel extends JPanel {
             }
         }
         Rectangle rc=getRightCardBounds();
-        if (rc!=null) {
+        if (rc!=null && canChangeChaos) {
             int bW=rc.width-24, bX=rc.x+12;
             if (new Rectangle(bX,rc.y+90, bW,36).contains(mx,my))  { chaosMode=false; game.onChaosChanged(false); repaint(); }
             if (new Rectangle(bX,rc.y+134,bW,36).contains(mx,my))  { chaosMode=true;  game.onChaosChanged(true);  repaint(); }
@@ -1364,11 +1378,23 @@ class SettingsPanel extends JPanel {
         String desc=chaosMode?"Spezialfrüchte aktiv!":"Klassisches Snake"; fm=g2.getFontMetrics();
         g2.drawString(desc, r.x+(r.width-fm.stringWidth(desc))/2, r.y+40);
         drawModeIcon(g2,r);
-        drawModeButton(g2, r.x+12, r.y+90,  r.width-24, 36, "Normal", !chaosMode, new Color(50,160,80));
-        drawModeButton(g2, r.x+12, r.y+134, r.width-24, 36, "Chaos",   chaosMode, new Color(160,50,200));
-        g2.setFont(new Font("SansSerif",Font.PLAIN,9)); g2.setColor(new Color(120,120,120));
-        String hint="Gilt ab nächstem Start"; fm=g2.getFontMetrics();
-        g2.drawString(hint, r.x+(r.width-fm.stringWidth(hint))/2, r.y+r.height-10);
+        if (canChangeChaos) {
+            drawModeButton(g2, r.x+12, r.y+90,  r.width-24, 36, "Normal", !chaosMode, new Color(50,160,80));
+            drawModeButton(g2, r.x+12, r.y+134, r.width-24, 36, "Chaos",   chaosMode, new Color(160,50,200));
+            g2.setFont(new Font("SansSerif",Font.PLAIN,9)); g2.setColor(new Color(120,120,120));
+            String hint="Gilt ab nächstem Start"; fm=g2.getFontMetrics();
+            g2.drawString(hint, r.x+(r.width-fm.stringWidth(hint))/2, r.y+r.height-10);
+        } else {
+            // Beitreter: Buttons ausgegraut, Hinweis
+            drawModeButton(g2, r.x+12, r.y+90,  r.width-24, 36, "Normal", !chaosMode, new Color(50,160,80));
+            drawModeButton(g2, r.x+12, r.y+134, r.width-24, 36, "Chaos",   chaosMode, new Color(160,50,200));
+            // Halbtransparentes Overlay über die Buttons
+            g2.setColor(new Color(20,24,32,140));
+            g2.fillRoundRect(r.x+12, r.y+90, r.width-24, 80, 10, 10);
+            g2.setFont(new Font("SansSerif",Font.BOLD,9)); g2.setColor(new Color(180,160,255));
+            String hint="Host bestimmt Modus"; fm=g2.getFontMetrics();
+            g2.drawString(hint, r.x+(r.width-fm.stringWidth(hint))/2, r.y+r.height-10);
+        }
     }
 
     private void drawModeIcon(Graphics2D g2, Rectangle r) {

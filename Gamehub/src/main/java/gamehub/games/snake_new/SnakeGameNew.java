@@ -10,6 +10,14 @@ import java.net.Socket;
 import java.util.*;
 import java.util.List;
 
+/**
+ * SnakeGameNew – unterstützt jetzt Single-Player UND Multiplayer (Netzwerk).
+ *
+ * Im Multiplayer-Modus:
+ *   - Verbindet sich mit einem SnakeServer (TCP).
+ *   - Schickt nur Richtungseingaben, empfängt den kompletten Spielzustand.
+ *   - Zeichnet beide Schlangen; die eigene Schlange wird heller dargestellt.
+ */
 public class SnakeGameNew extends JPanel implements ActionListener, KeyListener {
 
     // ===== Grid =====
@@ -111,10 +119,15 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     }
 
     // ===== Multiplayer Connect =====
-
+    /**
+     * Verbindet zum SnakeServer und schaltet in den Multiplayer-Modus.
+     * Muss aus dem EDT (oder einem eigenen Thread) aufgerufen werden.
+     */
     public void connectToServer(String host, int port) {
         multiplayerMode = true;
-        settingsPanel.setVisible(false);
+        // SettingsPanel bleibt sichtbar während der Wartezeit, damit Farbe & Chaos gewählt werden können.
+        // Es wird erst versteckt wenn START vom Server kommt.
+        settingsPanel.setVisible(true);
         mpState = MpState.CONNECTING;
         mpStatusMsg = "Verbinde mit " + host + ":" + port + " ...";
         repaint();
@@ -162,6 +175,12 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             mpMyColor    = Integer.parseInt(p[0]);
             mpOtherColor = Integer.parseInt(p[1]);
             selectedColorIndex = mpMyColor;
+            settingsPanel.setPreviewColorIndex(mpMyColor);
+            // Eigene Farb- und Chaos-Einstellungen sofort an den Server melden
+            if (mpOut != null) {
+                mpOut.println("COLOR:" + mpMyColor);
+                mpOut.println("CHAOS:" + (settingsPanel.isChaosMode() ? "1" : "0"));
+            }
         } else if (msg.startsWith("START:")) {
             String[] p = msg.substring(6).split(":");
             mpMyColor    = Integer.parseInt(p[0]);
@@ -169,6 +188,8 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             selectedColorIndex = mpMyColor;
             mpState = MpState.PLAYING;
             mpWinner = "";
+            // Jetzt erst das SettingsPanel wegblenden - der Spieler hatte Zeit zum Wählen
+            settingsPanel.setVisible(false);
         } else if (msg.startsWith("STATE:")) {
             parseState(msg.substring(6));
         } else if (msg.startsWith("GAMEOVER:")) {
@@ -472,17 +493,41 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         }
 
         g2.dispose();
-        if (!multiplayerMode) layoutSettingsPanel();
+        // Settings Panel layout immer aktualisieren (Single + MP Wartezeit)
+        layoutSettingsPanel();
     }
 
     // ── Multiplayer Paint ────────────────────────────────────────────────────
     private void paintMultiplayer(Graphics2D g2, double time) {
         switch (mpState) {
-            case CONNECTING, WAITING -> drawMpWaitScreen(g2);
+            case CONNECTING, WAITING -> {
+                // SettingsPanel ist sichtbar → nur kleinen Status-Banner unten zeigen
+                drawMpStatusBanner(g2);
+            }
             case PLAYING             -> drawMpGame(g2, time);
-            case WAITING_RESTART     -> drawMpWaitScreen(g2);
+            case WAITING_RESTART     -> {
+                drawMpGame(g2, time);
+                drawMpWaitScreen(g2); // kleines Overlay über dem letzten Spielstand
+            }
             case GAME_OVER           -> { drawMpGame(g2, time); drawMpGameOver(g2); }
         }
+    }
+
+    /** Kleiner Status-Banner am unteren Rand des Spielfelds während der Wartezeit. */
+    private void drawMpStatusBanner(Graphics2D g2) {
+        int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
+        // Spielfeld-Hintergrund trotzdem zeichnen damit die Cards seitlich sichtbar sind
+        // Banner unten im Spielfeld
+        int bannerH = 42;
+        g2.setColor(new Color(0,0,0,170));
+        g2.fillRoundRect(bx+20, by+bh-bannerH-12, bw-40, bannerH, 14, 14);
+        g2.setColor(new Color(130,220,130)); g2.setFont(new Font("SansSerif",Font.BOLD,14));
+        FontMetrics fm=g2.getFontMetrics();
+        g2.drawString(mpStatusMsg, bx+(bw-fm.stringWidth(mpStatusMsg))/2, by+bh-bannerH+14);
+        // Pulsierender Punkt
+        double pulse = 0.5+0.5*Math.sin(System.currentTimeMillis()/350.0);
+        g2.setColor(new Color(100,255,100,(int)(120+100*pulse)));
+        g2.fillOval(bx+bw/2-fm.stringWidth(mpStatusMsg)/2-16, by+bh-bannerH+5, 10, 10);
     }
 
     private void drawMpWaitScreen(Graphics2D g2) {
@@ -1147,10 +1192,26 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
 
     // ===== Getter/Setter =====
     public int  getSelectedColorIndex()      { return selectedColorIndex; }
-    public void setSelectedColorIndex(int i) { selectedColorIndex=i; repaint(); }
+    public void setSelectedColorIndex(int i) {
+        selectedColorIndex=i;
+        // Im Multiplayer-Wartemodus Farbe live an Server melden
+        if (multiplayerMode && mpOut != null && mpState != MpState.PLAYING) {
+            mpOut.println("COLOR:" + i);
+        }
+        repaint();
+    }
 
     /** Setzt Multiplayer-Spieler-ID (1 oder 2) – wird vom Wrapper gesetzt. */
     public void setMyPlayerId(int id) { this.myPlayerId = id; }
+
+    /** Wird vom SettingsPanel aufgerufen wenn Chaos-Modus geändert wird. */
+    public void onChaosChanged(boolean chaos) {
+        this.chaosMode = chaos;
+        // Im Multiplayer live an Server melden (nur Host hat Wirkung)
+        if (multiplayerMode && mpOut != null) {
+            mpOut.println("CHAOS:" + (chaos ? "1" : "0"));
+        }
+    }
 
     // ===== Main (Single-Player Test) =====
     public static void main(String[] args) {
@@ -1191,6 +1252,12 @@ class SettingsPanel extends JPanel {
 
     public boolean isChaosMode() { return chaosMode; }
 
+    /** Setzt den Farbvorschau-Index von außen (z.B. bei COLORINFO vom Server). */
+    public void setPreviewColorIndex(int idx) {
+        previewColorIndex = idx;
+        repaint();
+    }
+
     private void handleClick(int mx, int my) {
         Rectangle lc=getLeftCardBounds();
         if (lc!=null) {
@@ -1207,8 +1274,8 @@ class SettingsPanel extends JPanel {
         Rectangle rc=getRightCardBounds();
         if (rc!=null) {
             int bW=rc.width-24, bX=rc.x+12;
-            if (new Rectangle(bX,rc.y+90, bW,36).contains(mx,my))  { chaosMode=false; repaint(); }
-            if (new Rectangle(bX,rc.y+134,bW,36).contains(mx,my))  { chaosMode=true;  repaint(); }
+            if (new Rectangle(bX,rc.y+90, bW,36).contains(mx,my))  { chaosMode=false; game.onChaosChanged(false); repaint(); }
+            if (new Rectangle(bX,rc.y+134,bW,36).contains(mx,my))  { chaosMode=true;  game.onChaosChanged(true);  repaint(); }
         }
     }
 

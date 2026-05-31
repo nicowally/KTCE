@@ -15,6 +15,15 @@ import javafx.scene.text.FontWeight;
 import javax.swing.SwingUtilities;
 import java.io.IOException;
 
+/**
+ * SnakeModernWrapper – zeigt zuerst ein Lobby-Menü:
+ *   [Einzelspieler]   [Multiplayer hosten]   [Multiplayer beitreten]
+ *
+ * Multiplayer hosten: Startet einen SnakeServer im Hintergrund auf Port 54321,
+ *   dann verbindet sich der lokale Client damit (localhost).
+ *
+ * Multiplayer beitreten: IP-Eingabe → verbindet sich mit dem Host.
+ */
 public class SnakeModernWrapper {
 
     public static BorderPane createSnakePane() {
@@ -146,6 +155,10 @@ public class SnakeModernWrapper {
         portLabel.setFont(Font.font("SansSerif", 13));
         portLabel.setTextFill(Color.web("#888899"));
 
+        Label chaosHint = new Label("💡 Du (Host) bestimmst den Chaos-Modus für beide Spieler.");
+        chaosHint.setFont(Font.font("SansSerif", 12));
+        chaosHint.setTextFill(Color.web("#aa88ff"));
+
         Label statusLabel = new Label("Drücke 'Server starten', um auf Mitspieler zu warten.");
         statusLabel.setFont(Font.font("SansSerif", 13));
         statusLabel.setTextFill(Color.web("#aaaacc"));
@@ -187,7 +200,7 @@ public class SnakeModernWrapper {
             }, "HostSetup").start();
         });
 
-        box.getChildren().addAll(title, ipLabel, ipHint, portLabel, statusLabel, btnStart, btnBack);
+        box.getChildren().addAll(title, ipLabel, ipHint, portLabel, chaosHint, statusLabel, btnStart, btnBack);
         root.setCenter(box);
     }
 

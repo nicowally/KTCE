@@ -60,8 +60,7 @@ public class Check {
                             figure.col = col;
                             figure.row = row;
                             if (target != null) {
-                                target.col = -1;
-                                target.row = -1;
+                               logic.removeFigure(target);
                             }
 
                             boolean stillInCheck = isInCheck(colour, logic);
@@ -70,8 +69,7 @@ public class Check {
                             figure.col = oldCol;
                             figure.row = oldRow;
                             if (target != null) {
-                                target.col = col;
-                                target.row = row;
+                             logic.addFigure(target);
                             }
                             // Wenn es Zug gibt - Kein Schachmatt
                             if (!stillInCheck) {
@@ -107,8 +105,7 @@ public class Check {
                             figure.col = col;
                             figure.row = row;
                             if (target != null) {
-                                target.col = -1;
-                                target.row = -1;
+                               logic.removeFigure(target);
                             }
 
                             boolean stillInCheck = isInCheck(colour, logic);
@@ -117,8 +114,7 @@ public class Check {
                             figure.col = oldCol;
                             figure.row = oldRow;
                             if (target != null) {
-                                target.col = col;
-                                target.row = row;
+                               logic.addFigure(target);
                             }
 
                             // Wenn es einen Zug gibt der Spieler nicht ins Schach bringt = KEIN PAT

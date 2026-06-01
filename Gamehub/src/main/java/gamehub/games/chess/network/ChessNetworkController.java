@@ -5,7 +5,7 @@ import gamehub.games.chess.Figure;
 import javafx.application.Platform;
 
 
-public class ChessNetworkController extends ChessController implements ChessClient.MessageListener {
+public class ChessNetworkController extends ChessController implements gamehub.games.chess.network.ChessClient.MessageListener {
 
         private ChessClient client;
         private String myColor;

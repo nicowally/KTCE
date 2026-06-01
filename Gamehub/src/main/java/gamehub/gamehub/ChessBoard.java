@@ -172,8 +172,7 @@ public class ChessBoard extends GridPane {
                 selectedFigure.col = col;
                 selectedFigure.row = row;
                 if (targetFigure != null) {
-                    targetFigure.col = -1;
-                    targetFigure.row = -1;
+                 logic.removeFigure(targetFigure);
                 }
 
                 boolean illegal = Check.isInCheck(turncolour, getLogic());
@@ -182,8 +181,7 @@ public class ChessBoard extends GridPane {
                 selectedFigure.col = oldCol;
                 selectedFigure.row = oldRow;
                 if (targetFigure != null) {
-                    targetFigure.col = col;
-                    targetFigure.row = row;
+                    logic.addFigure(targetFigure);
                 }
                 if (!illegal) {
                     clearPossibleMoves();
@@ -328,15 +326,13 @@ public class ChessBoard extends GridPane {
                     figure.col = col;
                     figure.row = row;
                     if (target != null) {
-                        target.col = -1;
-                        target.row = -1;
+                        logic.removeFigure(target);
                     }
                     boolean illegal = Check.isInCheck(figure.type.substring(0, 1), logic);
                     figure.col = oldCol;
                     figure.row = oldRow;
                     if (target != null) {
-                        target.col = col;
-                        target.row = row;
+                        logic.addFigure(target);
                     }
 
                     if (!illegal) {

@@ -12,7 +12,7 @@
 <?import javafx.scene.shape.Rectangle?>
 <?import javafx.scene.text.Font?>
 
-<BorderPane style="-fx-background-color: #1a1a2e;" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="gamehub.gamehub.ChessController">
+<BorderPane style="-fx-background-color: #1a1a2e;" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="gamehub.games.chess.network.ChessNetworkController">
     <center>
         <VBox spacing="15.0" BorderPane.alignment="TOP_CENTER">
             <children>
@@ -68,7 +68,7 @@
                         <FlowPane fx:id="blackCapturedBox" />
                     </children>
                 </VBox>
-                <Button mnemonicParsing="false" onAction="#forfeit" text="Aufgeben" VBox.vgrow="ALWAYS">
+                <Button mnemonicParsing="false" onAction="#forfeit" style="-fx-background-color: transparent; -fx-text-fill: #aaaaaa; -fx-border-color: #aaaaaa; -fx-border-radius: 5;" text="Aufgeben" VBox.vgrow="ALWAYS">
                     <VBox.margin>
                         <Insets top="100.0" />
                     </VBox.margin>
@@ -91,4 +91,3 @@
             </children></VBox>
     </right>
 </BorderPane>
-

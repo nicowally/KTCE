@@ -335,7 +335,7 @@ public class Connect4Controller {
 
         Label patTitle = styledLabel("Gewinnende Muster", "#ccccee", 16, true);
 
-        HBox patterns = new HBox(20);
+        VBox patterns = new VBox(20);
         patterns.setAlignment(Pos.CENTER_LEFT);
         patterns.getChildren().addAll(
                 buildPatternCanvas("Waagerecht",  buildHorizontalPattern()),
@@ -440,9 +440,9 @@ public class Connect4Controller {
     }
 
     private int[][] buildHorizontalPattern() {
-        int[][] g = new int[6][6];
-        g[5][1] = 1; g[5][2] = 1; g[5][3] = 1; g[5][4] = 1;
-        g[5][0] = 2; g[5][5] = 2; g[4][1] = 2;
+        int[][] g = new int[3][6];
+        g[2][1] = 1; g[2][2] = 1; g[2][3] = 1; g[2][4] = 1;
+        g[2][0] = 2; g[2][5] = 2; g[1][1] = 2;
         return g;
     }
 
@@ -455,8 +455,8 @@ public class Connect4Controller {
 
     private int[][] buildDiagPattern() {
         int[][] g = new int[6][5];
-        g[5][0] = 1; g[4][1] = 1; g[5][3] = 1; g[3][2] = 1; g[3][3] = 1; g[2][3] = 1;
-        g[5][1] = 2; g[5][2] = 2; g[4][2] = 2; g[4][3] = 2; g[5][4] = 2;
+        g[5][0] = 1; g[5][1] = 2; g[4][1] = 1; g[3][2] = 1; g[4][0] = 1; g[2][3] = 1;
+        g[5][2] = 2; g[4][2] = 2; g[5][3] = 2; g[4][3] = 2; g[3][3] = 2; g[3][0] = 1;
         return g;
     }
 

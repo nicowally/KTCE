@@ -1,43 +1,59 @@
 package gamehub.gamehub;
 
-import gamehub.games.connectFour.Connect4Game;
-import gamehub.games.connectFour.Connect4Player;
+import gamehub.games.connectFour.*;
+import gamehub.network.*;
 import javafx.animation.*;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.canvas.Canvas;
-import javafx.scene.canvas.GraphicsContext;
+import javafx.geometry.*;
+import javafx.scene.canvas.*;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
-import javafx.scene.shape.Line;
-import javafx.scene.shape.StrokeLineCap;
+import javafx.scene.shape.*;
 import javafx.util.Duration;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class Connect4Controller {
 
+    // LAN mode — null in local mode
+    private Connect4Player myColor  = null;   // set after PLAYER_ASSIGN / host setup
+    private boolean        isLan    = false;
+    private boolean        isHost   = false;
+    private boolean        restartPending = false;
+    private NetworkServer  server   = null;
+    private NetworkClient  client   = null;
+
+    private static final int PORT = 55501;
+
+
     // ── Palette ───────────────────────────────────────────────────────────────
-    private static final Color COLOR_EMPTY    = Color.web("#0d1b2e");
+    private static final Color COLOR_EMPTY     = Color.web("#0d1b2e");
     private static final Color COLOR_EMPTY_RIM = Color.web("#1a2a40");
-    private static final Color COLOR_RED      = Color.web("#e74c3c");
-    private static final Color COLOR_YELLOW   = Color.web("#f1c40f");
-    private static final Color COLOR_WIN_LINE = Color.web("#f5c842");
-    private static final Color COLOR_DIM      = Color.web("#ffffff", 0.18);
+    private static final Color COLOR_RED       = Color.web("#e74c3c");
+    private static final Color COLOR_YELLOW    = Color.web("#f1c40f");
+    private static final Color COLOR_WIN_LINE  = Color.web("#f5c842");
+    private static final Color COLOR_DIM       = Color.web("#ffffff", 0.18);
 
     private static final double DISC_RADIUS  = 30.0;
-    private static final double CELL_SIZE    = 80.0;   // matches FXML minWidth/Height
-    private static final double BOARD_PAD    = 8.0;    // matches -fx-padding in FXML
+    private static final double CELL_SIZE    = 80.0;
+    private static final double BOARD_PAD    = 8.0;
 
     // ── FXML ──────────────────────────────────────────────────────────────────
-    @FXML private Pane      boardWrapper;   // absolute-positioned container for win-line
+    @FXML private ScrollPane gamePane;
+    @FXML private VBox       lobbyPane;
+    @FXML private Label      titleLabel;
+    @FXML private Label      lobbyStatus;
+    @FXML private Button     hostBtn;
+    @FXML private Button     joinBtn;
+    @FXML private HBox       ipBox;
+    @FXML private TextField  ipField;
+    @FXML private Button     connectBtn;
+    @FXML private Button     restartBtn;
+
+    @FXML private Pane      boardWrapper;
     @FXML private GridPane  boardGrid;
     @FXML private Label     statusLabel;
     @FXML private HBox      dropButtonBar;
@@ -60,6 +76,122 @@ public class Connect4Controller {
         buildBoard();
         wireColumnHover();
         updateStatus();
+    }
+
+    /** Called by MainMenuController to activate LAN mode before the scene is shown. */
+    public void initLan() {
+        isLan  = true;
+        lobbyPane.setVisible(true);
+        lobbyPane.setManaged(true);
+        disableAllColumns();
+        titleLabel.setText("4-Gewinnt – LAN");
+        restartBtn.setText("Neustart anfragen");
+        updateStatus();
+    }
+
+    // ── Lobby actions ─────────────────────────────────────────────────────────
+    @FXML
+    protected void onHostClick() {
+        isHost  = true;
+        myColor = Connect4Player.RED;
+        hostBtn.setDisable(true);
+        joinBtn.setDisable(true);
+        server = new NetworkServer();
+        server.setOnClientConnected(this::onPeerConnected);
+        server.setOnMessage(this::handleMessage);
+        server.setOnDisconnected(this::onPeerDisconnected);
+        try {
+            server.start(PORT);
+            lobbyStatus.setText("Warte auf Mitspieler… (" + server.getLocalAddress() + ":" + PORT + ")");
+        } catch (IOException e) {
+            lobbyStatus.setText("Fehler: Port konnte nicht geöffnet werden.");
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
+    protected void onJoinClick() {
+        isHost  = false;
+        myColor = Connect4Player.YELLOW;
+        hostBtn.setDisable(true);
+        joinBtn.setDisable(true);
+        ipBox.setVisible(true);
+        ipBox.setManaged(true);
+        lobbyStatus.setText("IP-Adresse des Hosts eingeben:");
+    }
+
+    @FXML
+    protected void onConnectClick() {
+        String ip = ipField.getText().trim();
+        if (ip.isEmpty()) { lobbyStatus.setText("Bitte IP-Adresse eingeben."); return; }
+        connectBtn.setDisable(true);
+        lobbyStatus.setText("Verbinde mit " + ip + "…");
+        client = new NetworkClient();
+        client.setOnConnected(this::onPeerConnected);
+        client.setOnMessage(this::handleMessage);
+        client.setOnDisconnected(this::onPeerDisconnected);
+        client.connect(ip, PORT);
+    }
+
+    // ── Connection events ─────────────────────────────────────────────────────
+    private void onPeerConnected() {
+        if (isHost) server.send(new GameMessage(GameMessage.Type.PLAYER_ASSIGN, "YELLOW"));
+        lobbyPane.setVisible(false);
+        lobbyPane.setManaged(false);
+        updateStatus();
+    }
+
+    private void onPeerDisconnected() {
+        statusLabel.setText("Verbindung getrennt.");
+        disableAllColumns();
+    }
+
+    // ── Incoming messages ─────────────────────────────────────────────────────
+    private void handleMessage(GameMessage msg) {
+        switch (msg.getType()) {
+            case PLAYER_ASSIGN -> {
+                myColor = msg.getStringPayload().equals("RED")
+                        ? Connect4Player.RED : Connect4Player.YELLOW;
+                updateStatus();
+            }
+            case MOVE -> applyRemoteMove(msg.getIntPayload());
+            case RESTART_REQ -> {
+                if (restartPending) {
+                    // Simultaneous request — treat as mutual agreement
+                    doReset();
+                    sendNet(new GameMessage(GameMessage.Type.RESTART_ACK));
+                } else {
+                    Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
+                            "Dein Gegner möchte neu starten. Zustimmen?",
+                            ButtonType.YES, ButtonType.NO);
+                    alert.setTitle("Neustart");
+                    alert.showAndWait().ifPresent(bt -> {
+                        if (bt == ButtonType.YES) {
+                            sendNet(new GameMessage(GameMessage.Type.RESTART_ACK));
+                            doReset();
+                        }
+                    });
+                }
+            }
+            case RESTART_ACK -> { restartPending = false; doReset(); }
+            case DISCONNECT   -> onPeerDisconnected();
+        }
+    }
+
+    private void applyRemoteMove(int col) {
+        int row = game.dropDisc(col);
+        if (row == -1) return;
+        Connect4Player player = game.getCell(row, col);
+        Color discColor = (player == Connect4Player.RED) ? COLOR_RED : COLOR_YELLOW;
+        animating = true;
+        disableAllColumns();
+        animateDrop(col, row, discColor, () -> {
+            animating = false;
+            if (!game.isGameOver()) enableMyColumns();
+            updateStatus();
+            if (game.isGameOver()) { animateWinLine(); dimLosingDiscs(); }
+        });
+        if (!game.isColumnPlayable(col)) colButtons.get(col).setDisable(true);
     }
 
     // ── Board construction ────────────────────────────────────────────────────
@@ -99,6 +231,9 @@ public class Connect4Controller {
     @FXML
     protected void onColumnClick(javafx.event.ActionEvent event) {
         if (animating) return;
+        // In LAN mode, reject clicks when it's not your turn
+        if (isLan && game.getCurrentPlayer() != myColor) return;
+        if (game.isGameOver()) return;
 
         Button clicked = (Button) event.getSource();
         int col = colButtons.indexOf(clicked);
@@ -110,6 +245,8 @@ public class Connect4Controller {
         // Commit the move in the model
         int row = game.dropDisc(col);
         if (row == -1) return;
+
+        if (isLan) sendNet(new GameMessage(GameMessage.Type.MOVE, col));
 
         Connect4Player player = game.getCell(row, col);
         Color discColor = (player == Connect4Player.RED) ? COLOR_RED : COLOR_YELLOW;
@@ -123,8 +260,10 @@ public class Connect4Controller {
 
             // Re-enable playable columns (unless game ended)
             if (!game.isGameOver()) {
-                for (int c = 0; c < Connect4Game.COLS; c++) {
-                    if (game.isColumnPlayable(c)) colButtons.get(c).setDisable(false);
+                if (isLan) { /* opponent's turn — columns stay disabled */ }
+                else {
+                    for (int c = 0; c < Connect4Game.COLS; c++)
+                        if (game.isColumnPlayable(c)) colButtons.get(c).setDisable(false);
                 }
             }
 
@@ -269,34 +408,50 @@ public class Connect4Controller {
     // ── Restart / Back / Rules ────────────────────────────────────────────────
     @FXML
     protected void onRestartClick() {
+        if (isLan) {
+            restartPending = true;
+            sendNet(new GameMessage(GameMessage.Type.RESTART_REQ));
+            statusLabel.setText("Neustart angefragt…");
+        } else {
+            doReset();
+        }
+    }
+
+    // Extracted from the old onRestartClick — called by both local restart and LAN ACK
+    private void doReset() {
+        restartPending = false;
         game.reset();
         animating = false;
-
-        // Remove win-lines
         boardWrapper.getChildren().removeIf(n -> n instanceof Line);
-
-        // Reset all discs
         for (int r = 0; r < Connect4Game.ROWS; r++) {
             for (int c = 0; c < Connect4Game.COLS; c++) {
                 Circle disc = circles[r][c];
-                disc.setFill(COLOR_EMPTY);
-                disc.setStroke(COLOR_EMPTY_RIM);
-                disc.setStrokeWidth(2.5);
-                disc.setOpacity(1.0);
-                disc.setScaleX(1.0);
-                disc.setScaleY(1.0);
-                disc.setTranslateY(0);
-                // Stop any running animations
-                disc.getTransforms().clear();
+                disc.setFill(COLOR_EMPTY); disc.setStroke(COLOR_EMPTY_RIM);
+                disc.setStrokeWidth(2.5);  disc.setOpacity(1.0);
+                disc.setScaleX(1.0);       disc.setScaleY(1.0); disc.setTranslateY(0);
             }
         }
-
-        for (Button b : colButtons) b.setDisable(false);
+        if (isLan) enableMyColumns(); else colButtons.forEach(b -> b.setDisable(false));
         updateStatus();
+    }
+
+    private void enableMyColumns() {
+        for (int c = 0; c < Connect4Game.COLS; c++)
+            colButtons.get(c).setDisable(!game.isColumnPlayable(c));
+    }
+
+    private void sendNet(GameMessage msg) {
+        if (isHost && server != null) server.send(msg);
+        else if (!isHost && client != null) client.send(msg);
     }
 
     @FXML
     protected void onBackClick() {
+        if (isLan) {
+            sendNet(new GameMessage(GameMessage.Type.DISCONNECT));
+            if (server != null) server.stop();
+            if (client != null) client.stop();
+        }
         try {
             FXMLLoader loader = new FXMLLoader(
                     GamehubApplication.class.getResource("main-menu.fxml"));

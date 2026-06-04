@@ -52,11 +52,28 @@ public class MainMenuController {
 
     @FXML
     protected void onConnect4Click() {
+        ButtonType localBtn  = new ButtonType("Lokal (2 Spieler)");
+        ButtonType lanBtn    = new ButtonType("LAN (Netzwerk)");
+        ButtonType cancelBtn = new ButtonType("Abbrechen");
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Spielmodus wählen");
+        alert.setHeaderText("Wie möchtest du 4-Gewinnt spielen?");
+        alert.setContentText("Wähle einen Modus:");
+        alert.getButtonTypes().setAll(localBtn, lanBtn, cancelBtn);
+
+        Optional<ButtonType> result = alert.showAndWait();
+        if (result.isEmpty() || result.get() == cancelBtn) return;
+
         try {
             FXMLLoader loader = new FXMLLoader(
                     GamehubApplication.class.getResource("/gamehub/gamehub/games/connectFour/connect4.fxml")
             );
             mainMenu.getScene().setRoot(loader.load());
+            if (result.get() == lanBtn) {
+                Connect4Controller controller = loader.getController();
+                controller.initLan();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }

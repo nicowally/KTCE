@@ -623,10 +623,18 @@ public class Connect4Controller {
             case YELLOW_WINS -> setStatus("🟡  Gelb gewinnt! 🎉", "#f1c40f");
             case DRAW        -> setStatus("Unentschieden!",        "#f5c842");
             case PLAYING     -> {
-                if (game.getCurrentPlayer() == Connect4Player.RED)
-                    setStatus("🔴  Rot ist dran", "#e74c3c");
-                else
-                    setStatus("🟡  Gelb ist dran", "#f1c40f");
+                boolean redTurn = game.getCurrentPlayer() == Connect4Player.RED;
+                String  color   = redTurn ? "#e74c3c" : "#f1c40f";
+                String  icon    = redTurn ? "🔴" : "🟡";
+
+                if (isLan && myColor != null) {
+                    boolean myTurn = game.getCurrentPlayer() == myColor;
+                    setStatus(myTurn ? (icon + "  Du bist dran") : (icon + "  Gegner ist dran"), color);
+                    // Authoritative column state — called whenever turn changes
+                    if (myTurn) enableMyColumns(); else disableAllColumns();
+                } else {
+                    setStatus(icon + (redTurn ? "  Rot ist dran" : "  Gelb ist dran"), color);
+                }
             }
         }
     }

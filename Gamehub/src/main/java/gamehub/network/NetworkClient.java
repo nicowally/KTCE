@@ -8,7 +8,6 @@ import java.util.function.Consumer;
 
 /**
  * The CLIENT (joiner) side of a LAN session.
- *
  * Usage:
  *   NetworkClient client = new NetworkClient();
  *   client.setOnMessage(msg -> { /* handle on FX thread *​/ });

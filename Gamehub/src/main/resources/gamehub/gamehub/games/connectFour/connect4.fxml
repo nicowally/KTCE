@@ -58,8 +58,8 @@
                                style="-fx-text-fill: #e74c3c; -fx-font-size: 26px; -fx-font-weight: bold;" />
 
                         <HBox alignment="CENTER">
-                            <VBox alignment="CENTER" spacing="0">
-                                <HBox fx:id="dropButtonBar" alignment="CENTER" spacing="0">
+                            <VBox alignment="CENTER">
+                                <HBox fx:id="dropButtonBar" alignment="CENTER">
                                     <Button fx:id="col0" onAction="#onColumnClick" text="▼"
                                             minWidth="80" prefWidth="80" maxWidth="80"
                                             style="-fx-font-size: 16px; -fx-background-color: transparent;
@@ -92,7 +92,6 @@
 
                                 <Pane fx:id="boardWrapper">
                                     <GridPane fx:id="boardGrid"
-                                              hgap="0" vgap="0"
                                               style="-fx-background-color: #0a1628;
                                                      -fx-padding: 8;
                                                      -fx-background-radius: 10;">
@@ -160,7 +159,7 @@
                                    -fx-background-radius: 6; -fx-cursor: hand;"/>
                 </HBox>
 
-                <Label fx:id="lobbyStatus" text=""
+                <Label fx:id="lobbyStatus"
                        style="-fx-text-fill: #aaaacc; -fx-font-size: 14px;"/>
             </VBox>
 

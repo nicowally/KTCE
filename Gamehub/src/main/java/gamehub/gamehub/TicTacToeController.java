@@ -312,14 +312,14 @@ public class TicTacToeController {
         animateSymbol(idx, game.getCell(idx), false);
         updateStatus();
 
+        if (isLan) {
+            sendNet(new GameMessage(GameMessage.Type.MOVE, idx));
+        }
         if (game.isGameOver()) {
             scheduleWinEffects();
             freezeBoard();
             return;
-        }
-
-        if (isLan) {
-            sendNet(new GameMessage(GameMessage.Type.MOVE, idx));
+        } if (isLan){
             freezeBoard();   // opponent's turn
         } else if (vsAI) {
             scheduleAiMove(420);

@@ -81,34 +81,36 @@ public class MainMenuController {
 
     @FXML
     protected void onTicTacToeClick() {
-        // Ask the user whether they want to play against another player or the AI
         ButtonType twoPlayerBtn = new ButtonType("Gegen Spieler");
         ButtonType aiBtn        = new ButtonType("Gegen KI");
+        ButtonType lanBtn       = new ButtonType("LAN (Netzwerk)");
         ButtonType cancelBtn    = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Tic-Tac-Toe");
         alert.setHeaderText("Gegen wen möchtest du spielen?");
         alert.setContentText("Wähle einen Spielmodus.");
-        alert.getButtonTypes().setAll(twoPlayerBtn, aiBtn, cancelBtn);
+        alert.getButtonTypes().setAll(twoPlayerBtn, aiBtn, lanBtn, cancelBtn);
 
         Optional<ButtonType> result = alert.showAndWait();
 
         if (result.isEmpty() || result.get() == cancelBtn) return;
 
-        boolean vsAI = result.get() == aiBtn;
-
         try {
             FXMLLoader loader = new FXMLLoader(
                     GamehubApplication.class.getResource("/gamehub/gamehub/games/ticTacToe/game.fxml")
             );
-            // Load the FXML – this also calls TicTacToeController.initialize()
             javafx.scene.Parent root = loader.load();
-
-            // Pass the mode to the controller, then call postInit()
             TicTacToeController controller = loader.getController();
-            controller.initMode(vsAI);
-            controller.postInit();
+
+            if (result.get() == lanBtn) {
+                // LAN mode — initLan() takes over, no postInit() needed
+                controller.initLan();
+            } else {
+                boolean vsAI = result.get() == aiBtn;
+                controller.initMode(vsAI);
+                controller.postInit();
+            }
 
             mainMenu.getScene().setRoot(root);
         } catch (IOException e) {

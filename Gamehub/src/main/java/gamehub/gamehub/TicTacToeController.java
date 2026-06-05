@@ -1,6 +1,7 @@
 package gamehub.gamehub;
 
 import gamehub.games.ticTacToe.*;
+import gamehub.network.*;
 import javafx.animation.*;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -35,19 +36,29 @@ import java.io.IOException;
  */
 public class TicTacToeController {
 
+    // ── LAN state ─────────────────────────────────────────────────────────────
+    private boolean       isLan          = false;
+    private boolean       isHost         = false;
+    private boolean       restartPending = false;
+    private Player        myPlayer       = null;   // assigned after lobby
+    private NetworkServer server         = null;
+    private NetworkClient client         = null;
+
+    private static final int PORT = 55502;   // distinct from Connect4's 55501
+
     // ── Palette ───────────────────────────────────────────────────────────────
     private static final Color BG_CELL        = Color.web("#13132a");
     private static final Color BG_CELL_HOVER  = Color.web("#1c1c38");
     private static final Color BG_CELL_WIN    = Color.web("#1a2a1a");
     private static final Color COLOR_GRID     = Color.web("#2e2e55");
-    private static final Color COLOR_X        = Color.web("#4af0c8");   // teal-neon
-    private static final Color COLOR_O        = Color.web("#f05a7e");   // coral-neon
-    private static final Color COLOR_WIN_LINE = Color.web("#f5c842");   // gold
+    private static final Color COLOR_X        = Color.web("#4af0c8");
+    private static final Color COLOR_O        = Color.web("#f05a7e");
+    private static final Color COLOR_WIN_LINE = Color.web("#f5c842");
     private static final Color COLOR_DIM      = Color.web("#888888", 0.35);
 
     private static final double SYMBOL_STROKE = 8.0;
     private static final double GRID_STROKE   = 4.0;
-    private static final double CELL_SIZE     = 140.0;   // matches FXML prefWidth/Height
+    private static final double CELL_SIZE     = 140.0;
 
     // ── FXML ─────────────────────────────────────────────────────────────────
     @FXML private Pane      boardWrapper;   // absolute-positioned container for win-line
@@ -60,15 +71,20 @@ public class TicTacToeController {
     @FXML private Slider    difficultySlider;
     @FXML private Label     difficultyLabel;
 
-    // ── State ─────────────────────────────────────────────────────────────────
-    /** Per-cell symbol canvases (index 0-8). */
-    private final Canvas[] symbolCanvases = new Canvas[9];
-    /** Per-cell overlay regions for click detection. */
-    private final Region[] overlays       = new Region[9];
-    /** Per-cell StackPanes. */
-    private final StackPane[] cellPanes   = new StackPane[9];
-    /** Running draw animations (so we can cancel on restart). */
-    private final Timeline[] drawAnims    = new Timeline[9];
+    // ── LAN lobby FXML ────────────────────────────────────────────────────────
+    @FXML private VBox      lobbyPane;
+    @FXML private Label     lobbyStatus;
+    @FXML private Button    hostBtn;
+    @FXML private Button    joinBtn;
+    @FXML private HBox      ipBox;
+    @FXML private TextField ipField;
+    @FXML private Button    connectBtn;
+
+    // ── Per-cell state ────────────────────────────────────────────────────────
+    private final Canvas[]    symbolCanvases = new Canvas[9];
+    private final Region[]    overlays       = new Region[9];
+    private final StackPane[] cellPanes      = new StackPane[9];
+    private final Timeline[]  drawAnims      = new Timeline[9];
 
     private TicTacToeGame game;
     private boolean vsAI        = false;
@@ -79,6 +95,19 @@ public class TicTacToeController {
     // ── Public API ────────────────────────────────────────────────────────────
     public void initMode(boolean vsAI) { this.vsAI = vsAI; }
 
+    /**
+     * Called by MainMenuController to activate LAN mode before the scene is shown.
+     * Mirrors Connect4Controller.initLan().
+     */
+    public void initLan() {
+        isLan = true;
+        lobbyPane.setVisible(true);
+        lobbyPane.setManaged(true);
+        freezeBoard();
+        statusLabel.setText("Warte auf LAN-Verbindung…");
+        statusLabel.setStyle("-fx-text-fill: #aaaacc; -fx-font-size: 22px; -fx-font-weight: bold;");
+    }
+
     // ── FXML lifecycle ────────────────────────────────────────────────────────
     @FXML
     public void initialize() {
@@ -87,7 +116,6 @@ public class TicTacToeController {
     }
 
     public void postInit() {
-        // AI-only widgets
         if (vsAI) {
             sideSelectionBox.setVisible(true);  sideSelectionBox.setManaged(true);
             difficultyBox.setVisible(true);     difficultyBox.setManaged(true);
@@ -109,6 +137,111 @@ public class TicTacToeController {
         updateStatus();
 
         if (vsAI && humanPlayer == Player.O) scheduleAiMove(900);
+    }
+
+    // ── Lobby actions ─────────────────────────────────────────────────────────
+    @FXML
+    protected void onHostClick() {
+        isHost   = true;
+        myPlayer = Player.X;   // host is always X (X goes first)
+        hostBtn.setDisable(true);
+        joinBtn.setDisable(true);
+        server = new NetworkServer();
+        server.setOnClientConnected(this::onPeerConnected);
+        server.setOnMessage(this::handleMessage);
+        server.setOnDisconnected(this::onPeerDisconnected);
+        try {
+            server.start(PORT);
+            lobbyStatus.setText("Warte auf Mitspieler… (" + server.getLocalAddress() + ":" + PORT + ")");
+        } catch (IOException e) {
+            lobbyStatus.setText("Fehler: Port konnte nicht geöffnet werden.");
+            e.printStackTrace();
+        }
+    }
+
+    @FXML
+    protected void onJoinClick() {
+        isHost   = false;
+        myPlayer = Player.O;   // client is always O
+        hostBtn.setDisable(true);
+        joinBtn.setDisable(true);
+        ipBox.setVisible(true);
+        ipBox.setManaged(true);
+        lobbyStatus.setText("IP-Adresse des Hosts eingeben:");
+    }
+
+    @FXML
+    protected void onConnectClick() {
+        String ip = ipField.getText().trim();
+        if (ip.isEmpty()) { lobbyStatus.setText("Bitte IP-Adresse eingeben."); return; }
+        connectBtn.setDisable(true);
+        lobbyStatus.setText("Verbinde mit " + ip + "…");
+        client = new NetworkClient();
+        client.setOnConnected(this::onPeerConnected);
+        client.setOnMessage(this::handleMessage);
+        client.setOnDisconnected(this::onPeerDisconnected);
+        client.connect(ip, PORT);
+    }
+
+    // ── Connection events ─────────────────────────────────────────────────────
+    private void onPeerConnected() {
+        // Host tells client which symbol it has been assigned
+        if (isHost) server.send(new GameMessage(GameMessage.Type.PLAYER_ASSIGN, "O"));
+        lobbyPane.setVisible(false);
+        lobbyPane.setManaged(false);
+        updateStatus();
+        // X (host) goes first — enable board for host only
+        if (myPlayer == Player.X) unfreezeBoard();
+    }
+
+    private void onPeerDisconnected() {
+        statusLabel.setText("Verbindung getrennt.");
+        statusLabel.setStyle("-fx-text-fill: #ff6666; -fx-font-size: 22px; -fx-font-weight: bold;");
+        freezeBoard();
+    }
+
+    // ── Incoming messages ─────────────────────────────────────────────────────
+    private void handleMessage(GameMessage msg) {
+        switch (msg.getType()) {
+            case PLAYER_ASSIGN -> {
+                myPlayer = msg.getStringPayload().equals("X") ? Player.X : Player.O;
+                updateStatus();
+                // X moves first; if we're O, board stays frozen until host moves
+            }
+            case MOVE -> applyRemoteMove(msg.getIntPayload());
+            case RESTART_REQ -> {
+                if (restartPending) {
+                    doReset();
+                    sendNet(new GameMessage(GameMessage.Type.RESTART_ACK));
+                } else {
+                    Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
+                            "Dein Gegner möchte neu starten. Zustimmen?",
+                            ButtonType.YES, ButtonType.NO);
+                    alert.setTitle("Neustart");
+                    alert.showAndWait().ifPresent(bt -> {
+                        if (bt == ButtonType.YES) {
+                            sendNet(new GameMessage(GameMessage.Type.RESTART_ACK));
+                            doReset();
+                        }
+                    });
+                }
+            }
+            case RESTART_ACK -> { restartPending = false; doReset(); }
+            case DISCONNECT  -> onPeerDisconnected();
+        }
+    }
+
+    private void applyRemoteMove(int idx) {
+        if (!game.makeMove(idx)) return;
+        animateSymbol(idx, game.getCell(idx), false);
+        updateStatus();
+        if (game.isGameOver()) {
+            scheduleWinEffects();
+            freezeBoard();
+        } else {
+            // Now it's our turn
+            unfreezeBoard();
+        }
     }
 
     // ── Board construction ────────────────────────────────────────────────────
@@ -136,9 +269,7 @@ public class TicTacToeController {
             overlay.setOnMouseEntered(e -> {
                 if (isCellClickable(idx)) drawCellBackground(bgCanvas, row, col, true, false);
             });
-            overlay.setOnMouseExited(e -> {
-                drawCellBackground(bgCanvas, row, col, false, false);
-            });
+            overlay.setOnMouseExited(e -> drawCellBackground(bgCanvas, row, col, false, false));
             overlays[i] = overlay;
 
             StackPane pane = new StackPane(bgCanvas, symCanvas, overlay);
@@ -158,27 +289,20 @@ public class TicTacToeController {
         double h = canvas.getHeight();
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.clearRect(0, 0, w, h);
-
-        // Cell fill
         gc.setFill(win ? BG_CELL_WIN : (hover ? BG_CELL_HOVER : BG_CELL));
         gc.fillRect(0, 0, w, h);
-
-        // Thick grid lines: right border for col 0-1, bottom border for row 0-1
         gc.setStroke(COLOR_GRID);
         gc.setLineWidth(GRID_STROKE);
-        if (col < 2) { // right border
-            gc.strokeLine(w - GRID_STROKE / 2, 0, w - GRID_STROKE / 2, h);
-        }
-        if (row < 2) { // bottom border
-            gc.strokeLine(0, h - GRID_STROKE / 2, w, h - GRID_STROKE / 2);
-        }
+        if (col < 2) gc.strokeLine(w - GRID_STROKE / 2, 0, w - GRID_STROKE / 2, h);
+        if (row < 2) gc.strokeLine(0, h - GRID_STROKE / 2, w, h - GRID_STROKE / 2);
     }
 
     // ── Cell click ────────────────────────────────────────────────────────────
     private boolean isCellClickable(int idx) {
-        return game.getCell(idx) == null
-                && !game.isGameOver()
-                && !(vsAI && game.getCurrentPlayer() != humanPlayer);
+        if (game.getCell(idx) != null || game.isGameOver()) return false;
+        if (isLan)  return myPlayer != null && game.getCurrentPlayer() == myPlayer;
+        if (vsAI)   return game.getCurrentPlayer() == humanPlayer;
+        return true;
     }
 
     private void onCellClicked(int idx) {
@@ -187,7 +311,19 @@ public class TicTacToeController {
         lockDifficultyIfFirstMove();
         animateSymbol(idx, game.getCell(idx), false);
         updateStatus();
-        if (!game.isGameOver() && vsAI) scheduleAiMove(420);
+
+        if (game.isGameOver()) {
+            scheduleWinEffects();
+            freezeBoard();
+            return;
+        }
+
+        if (isLan) {
+            sendNet(new GameMessage(GameMessage.Type.MOVE, idx));
+            freezeBoard();   // opponent's turn
+        } else if (vsAI) {
+            scheduleAiMove(420);
+        }
     }
 
     // ── Animations ────────────────────────────────────────────────────────────
@@ -206,12 +342,8 @@ public class TicTacToeController {
         double pad = 28.0;
         Color baseColor = dim ? COLOR_DIM : (player == Player.X ? COLOR_X : COLOR_O);
 
-        // progress 0→1 drives the draw
-        final double[] progress = {0.0};
-
         Timeline tl = new Timeline();
         tl.getKeyFrames().add(new KeyFrame(Duration.millis(280), e -> {}));
-        // We animate manually via a per-frame callback
         AnimationTimer timer = new AnimationTimer() {
             long startNs = -1;
             final double durationMs = 270;
@@ -219,27 +351,21 @@ public class TicTacToeController {
             @Override
             public void handle(long now) {
                 if (startNs < 0) startNs = now;
-                double elapsed = (now - startNs) / 1_000_000.0;
-                progress[0] = Math.min(1.0, elapsed / durationMs);
-
+                double p = Math.min(1.0, (now - startNs) / 1_000_000.0 / durationMs);
                 GraphicsContext gc = canvas.getGraphicsContext2D();
                 gc.clearRect(0, 0, w, h);
                 gc.setLineCap(StrokeLineCap.ROUND);
                 gc.setLineWidth(SYMBOL_STROKE);
                 gc.setStroke(baseColor);
-
-                if (player == Player.X) {
-                    drawXProgress(gc, pad, w, h, progress[0]);
-                } else {
-                    drawOProgress(gc, pad, w, h, progress[0]);
-                }
-
-                if (progress[0] >= 1.0) stop();
+                if (player == Player.X) drawXProgress(gc, pad, w, h, p);
+                else                    drawOProgress(gc, pad, w, h, p);
+                if (p >= 1.0) stop();
             }
         };
-        drawAnims[idx] = tl;   // just track it so we can cancel
+        drawAnims[idx] = tl;
         timer.start();
-        // Mark overlay as non-interactive
+
+        // Marks overlay as non-interactive
         overlays[idx].setStyle("-fx-cursor: default;");
         overlays[idx].setOnMouseEntered(null);
         overlays[idx].setOnMouseExited(null);
@@ -248,10 +374,8 @@ public class TicTacToeController {
     /** Draw an X stroked up to {@code t} ∈ [0,1]. Two diagonals each half the time. */
     private void drawXProgress(GraphicsContext gc, double pad, double w, double h, double t) {
         double x0 = pad, y0 = pad, x1 = w - pad, y1 = h - pad;
-        // First diagonal: top-left → bottom-right
         double t1 = Math.min(1.0, t * 2);
         gc.strokeLine(x0, y0, x0 + (x1 - x0) * t1, y0 + (y1 - y0) * t1);
-        // Second diagonal: top-right → bottom-left
         if (t > 0.5) {
             double t2 = (t - 0.5) * 2;
             gc.strokeLine(x1, y0, x1 - (x1 - x0) * t2, y0 + (y1 - y0) * t2);
@@ -262,12 +386,9 @@ public class TicTacToeController {
     private void drawOProgress(GraphicsContext gc, double pad, double w, double h, double t) {
         double cx = w / 2, cy = h / 2;
         double r  = (Math.min(w, h) / 2) - pad;
-        // JavaFX strokeArc draws the arc of a rectangle; use a temp approach with
-        // path segments for smooth stroke animation
         int segments = 90;
         double sweep = 360.0 * t;
-        double startAngle = -90; // start at top
-
+        double startAngle = -90;
         gc.beginPath();
         for (int i = 0; i <= segments; i++) {
             double ang = Math.toRadians(startAngle + sweep * i / segments);
@@ -281,8 +402,6 @@ public class TicTacToeController {
 
     /** Animate the winning line across the board. */
     private void animateWinLine(int[] line) {
-        // Overshoot: extend the line 28px past the outer cell centres so it
-        // visually crosses through the symbols rather than stopping at their centres.
         final double OVERSHOOT = 46.0;
 
         double[] s = cellCentre(line[0]);
@@ -300,16 +419,12 @@ public class TicTacToeController {
         double endX   = e[0] + ux * OVERSHOOT;
         double endY   = e[1] + uy * OVERSHOOT;
 
-        Line winLine = new Line(startX, startY, startX, startY);
+        Line winLine = new Line(startX, startY, endX, endY);
         winLine.setStroke(COLOR_WIN_LINE);
         winLine.setStrokeWidth(10);
         winLine.setStrokeLineCap(StrokeLineCap.ROUND);
         winLine.setOpacity(0.92);
-        // Make the line pointer-transparent so it doesn't block cell interaction
         winLine.setMouseTransparent(true);
-
-        // boardWrapper is a Pane → children use absolute coordinates relative to
-        // the Pane's top-left, which matches cellCentre() perfectly.
         boardWrapper.getChildren().add(winLine);
 
         KeyValue kvX = new KeyValue(winLine.endXProperty(), endX, Interpolator.EASE_OUT);
@@ -317,7 +432,7 @@ public class TicTacToeController {
         Timeline tl  = new Timeline(new KeyFrame(Duration.millis(420), kvX, kvY));
         tl.play();
 
-        // Dim non-winning cells
+        // Dims non-winning cells
         for (int i = 0; i < 9; i++) {
             boolean inLine = false;
             for (int li : line) if (li == i) inLine = true;
@@ -335,14 +450,13 @@ public class TicTacToeController {
 
     /** Fade a cell's symbol to dim. */
     private void dimCell(int idx) {
-        Canvas c = symbolCanvases[idx];
-        FadeTransition ft = new FadeTransition(Duration.millis(300), c);
+        FadeTransition ft = new FadeTransition(Duration.millis(300), symbolCanvases[idx]);
         ft.setFromValue(1.0);
         ft.setToValue(0.28);
         ft.play();
     }
 
-    // ── Side-selection ────────────────────────────────────────────────────────
+    // ── Side-selection (local/AI only) ────────────────────────────────────────
     @FXML
     protected void onPlayerSideBtnClick() {
         humanPlayer = (humanPlayer == Player.X) ? Player.O : Player.X;
@@ -366,21 +480,39 @@ public class TicTacToeController {
         String active   = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #4a90d9; -fx-text-fill: white; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;";
         String inactive = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #1e1e3a; -fx-text-fill: #8888bb; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;";
 
-        if (humanPlayer == Player.X) {
-            playerSideBtn.setStyle(active);
-            aiSideBtn.setStyle(inactive);
-        } else {
-            playerSideBtn.setStyle(inactive);
-            aiSideBtn.setStyle(active);
-        }
+        playerSideBtn.setStyle(humanPlayer == Player.X ? active : inactive);
+        aiSideBtn.setStyle(humanPlayer == Player.X ? inactive : active);
     }
 
     // ── Restart / Back / Rules ────────────────────────────────────────────────
     @FXML
-    protected void onRestartClick() { restartGame(); }
+    protected void onRestartClick() {
+        if (isLan) {
+            restartPending = true;
+            sendNet(new GameMessage(GameMessage.Type.RESTART_REQ));
+            statusLabel.setText("Neustart angefragt…");
+            statusLabel.setStyle("-fx-text-fill: #aaaacc; -fx-font-size: 22px; -fx-font-weight: bold;");
+        } else {
+            restartGame();
+        }
+    }
+
+    private void doReset() {
+        restartPending = false;
+        restartGame();
+        // In LAN: X (host) always goes first after reset
+        if (isLan) {
+            if (myPlayer == Player.X) unfreezeBoard(); else freezeBoard();
+        }
+    }
 
     @FXML
     protected void onBackClick() {
+        if (isLan) {
+            sendNet(new GameMessage(GameMessage.Type.DISCONNECT));
+            if (server != null) server.stop();
+            if (client != null) client.stop();
+        }
         try {
             FXMLLoader loader = new FXMLLoader(
                     GamehubApplication.class.getResource("main-menu.fxml"));
@@ -393,13 +525,143 @@ public class TicTacToeController {
         showRulesDialog();
     }
 
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private void sendNet(GameMessage msg) {
+        if (isHost && server != null) server.send(msg);
+        else if (!isHost && client != null) client.send(msg);
+    }
+
+    private void freezeBoard() {
+        for (Region ov : overlays) { if (ov != null) ov.setMouseTransparent(true); }
+    }
+
+    /**
+     * Re-enables only empty cells (preserves the pointer-transparent style on
+     * already-played cells set inside animateSymbol).
+     */
+    private void unfreezeBoard() {
+        for (int i = 0; i < 9; i++) {
+            if (overlays[i] != null && game.getCell(i) == null && !game.isGameOver()) {
+                overlays[i].setMouseTransparent(false);
+                final int idx = i;
+                final int row = i / 3, col = i % 3;
+                Canvas bg = (Canvas) cellPanes[i].getChildren().get(0);
+                overlays[i].setStyle("-fx-cursor: hand;");
+                overlays[i].setOnMouseEntered(e -> {
+                    if (isCellClickable(idx)) drawCellBackground(bg, row, col, true, false);
+                });
+                overlays[i].setOnMouseExited(e -> drawCellBackground(bg, row, col, false, false));
+            }
+        }
+    }
+
+    private void lockDifficultyIfFirstMove() {
+        if (!gameStarted) {
+            gameStarted = true;
+            if (difficultySlider != null) difficultySlider.setDisable(true);
+        }
+    }
+
+    private void scheduleAiMove(long delayMs) {
+        for (Region ov : overlays) { if (ov != null) ov.setMouseTransparent(true); }
+        PauseTransition pause = new PauseTransition(Duration.millis(delayMs));
+        pause.setOnFinished(e -> Platform.runLater(() -> {
+            if (game.isGameOver()) return;
+            for (int i = 0; i < 9; i++)
+                if (overlays[i] != null) overlays[i].setMouseTransparent(false);
+
+            Player aiPlayer = (humanPlayer == Player.X) ? Player.O : Player.X;
+            int move = TicTacToeAI.getBestMove(game.getBoard(), aiPlayer, difficulty);
+            if (move == -1) return;
+            game.makeMove(move);
+            lockDifficultyIfFirstMove();
+            animateSymbol(move, game.getCell(move), false);
+            updateStatus();
+            if (game.isGameOver()) freezeBoard();
+        }));
+        pause.play();
+    }
+
+    // ── Status ────────────────────────────────────────────────────────────────
+    private void updateStatus() {
+        switch (game.getGameState()) {
+            case X_WINS -> {
+                String w = resolveWinner(Player.X);
+                setStatus(w + " gewinnt! 🎉", "#4af0c8");
+                scheduleWinEffects();
+                freezeBoard();
+            }
+            case O_WINS -> {
+                String w = resolveWinner(Player.O);
+                setStatus(w + " gewinnt! 🎉", "#f05a7e");
+                scheduleWinEffects();
+                freezeBoard();
+            }
+            case DRAW -> {
+                setStatus("Unentschieden!", "#f5c842");
+                freezeBoard();
+            }
+            case PLAYING -> {
+                Player cur = game.getCurrentPlayer();
+                String txt;
+                if (isLan && myPlayer != null) {
+                    boolean myTurn = cur == myPlayer;
+                    txt = myTurn ? "Du bist dran (" + cur + ")" : "Gegner ist dran (" + cur + ")";
+                } else if (vsAI) {
+                    txt = (cur == humanPlayer) ? "Du bist dran (" + cur + ")" : "KI denkt… (" + cur + ")";
+                } else {
+                    txt = "Spieler " + cur + " ist an der Reihe";
+                }
+                Color c = (cur == Player.X) ? COLOR_X : COLOR_O;
+                setStatus(txt, toHex(c));
+            }
+        }
+    }
+
+    private void scheduleWinEffects() {
+        PauseTransition pt = new PauseTransition(Duration.millis(320));
+        pt.setOnFinished(e -> {
+            int[] wl = game.getWinningLine();
+            if (wl != null) animateWinLine(wl);
+        });
+        pt.play();
+    }
+
+    private void setStatus(String text, String hexColor) {
+        statusLabel.setText(text);
+        statusLabel.setStyle("-fx-text-fill: " + hexColor + "; -fx-font-size: 26px; -fx-font-weight: bold;");
+    }
+
+    private String resolveWinner(Player w) {
+        if (isLan)  return (w == myPlayer) ? "Du" : "Gegner";
+        if (!vsAI)  return "Spieler " + w;
+        return (w == humanPlayer) ? "Du" : "KI";
+    }
+
+    private String toHex(Color c) {
+        return String.format("#%02x%02x%02x",
+                (int)(c.getRed()   * 255),
+                (int)(c.getGreen() * 255),
+                (int)(c.getBlue()  * 255));
+    }
+
+    private void restartGame() {
+        for (int i = 0; i < 9; i++)
+            if (drawAnims[i] != null) drawAnims[i].stop();
+        game.reset();
+        gameStarted = false;
+        boardWrapper.getChildren().removeIf(n -> n instanceof Line);
+        buildBoard();
+        if (difficultySlider != null) difficultySlider.setDisable(false);
+        updateStatus();
+        if (!isLan && vsAI && humanPlayer == Player.O) scheduleAiMove(900);
+    }
+
     // ── Rules dialog ──────────────────────────────────────────────────────────
     private void showRulesDialog() {
         Dialog<Void> dlg = new Dialog<>();
         dlg.setTitle("Tic-Tac-Toe – Regeln");
         dlg.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-
-        // Style the dialog pane
         DialogPane dp = dlg.getDialogPane();
         dp.setStyle("-fx-background-color: #13132a;");
 
@@ -407,11 +669,9 @@ public class TicTacToeController {
         content.setPadding(new Insets(24));
         content.setPrefWidth(640);
 
-        // Title
         Label title = new Label("So funktioniert Tic-Tac-Toe");
         title.setStyle("-fx-text-fill: white; -fx-font-size: 22px; -fx-font-weight: bold;");
 
-        // Rules text
         Label rules = new Label(
                 "• Zwei Spieler setzen abwechselnd X und O auf einem 3×3-Feld.\n" +
                         "• Ziel: Drei eigene Symbole in einer Reihe (waagerecht, senkrecht oder diagonal).\n" +
@@ -422,13 +682,11 @@ public class TicTacToeController {
         rules.setStyle("-fx-text-fill: #aaaacc; -fx-font-size: 14px; -fx-wrap-text: true;");
         rules.setWrapText(true);
 
-        // Outcome illustrations
         Label outcomeTitle = new Label("Gewinnende Muster");
         outcomeTitle.setStyle("-fx-text-fill: #ccccee; -fx-font-size: 16px; -fx-font-weight: bold;");
 
         HBox outcomes = new HBox(16);
         outcomes.setAlignment(Pos.CENTER_LEFT);
-
         outcomes.getChildren().addAll(
                 buildOutcomeBoard("Zeile",
                         new String[]{"X","X","X","O","·","O","·","·","·"},
@@ -444,7 +702,6 @@ public class TicTacToeController {
                         new int[]{})
         );
 
-        // Tips
         Label tipsTitle = new Label("Tipps");
         tipsTitle.setStyle("-fx-text-fill: #ccccee; -fx-font-size: 16px; -fx-font-weight: bold;");
         Label tips = new Label(
@@ -461,10 +718,8 @@ public class TicTacToeController {
         scroll.setStyle("-fx-background-color: #13132a; -fx-background: #13132a;");
         scroll.setFitToWidth(true);
         scroll.setPrefHeight(520);
-
         dp.setContent(scroll);
-        dp.lookup(".close-button-bar") ;
-        // Style the close button
+
         Button closeBtn = (Button) dp.lookupButton(ButtonType.CLOSE);
         if (closeBtn != null) {
             closeBtn.setStyle("-fx-background-color: #2a2a4a; -fx-text-fill: #aaaacc; -fx-font-size: 14px; " +
@@ -482,15 +737,14 @@ public class TicTacToeController {
      * @param winLine indices of the 3 winning cells (empty for draw/no-win)
      */
     private VBox buildOutcomeBoard(String label, String[] symbols, int[] winLine) {
-        double cs = 44;   // mini cell size
-        double total = cs * 3 + 6; // 3 cells + 2 gaps of 3px
+        double cs = 44;
+        double total = cs * 3 + 6;
         Canvas c = new Canvas(total, total);
         GraphicsContext gc = c.getGraphicsContext2D();
 
         java.util.Set<Integer> winSet = new java.util.HashSet<>();
         for (int w : winLine) winSet.add(w);
 
-        // Grid background
         gc.setFill(Color.web("#0d0d1a"));
         gc.fillRect(0, 0, total, total);
 
@@ -500,12 +754,10 @@ public class TicTacToeController {
             double x = col * (cs + 3);
             double y = r  * (cs + 3);
 
-            // Cell bg
             boolean isWin = winSet.contains(i);
             gc.setFill(isWin ? Color.web("#1a2a1a") : Color.web("#13132a"));
             gc.fillRoundRect(x, y, cs, cs, 4, 4);
 
-            // Symbol
             String sym = symbols[i];
             if (!sym.equals("·")) {
                 Color clr = sym.equals("X") ? COLOR_X : COLOR_O;
@@ -530,7 +782,6 @@ public class TicTacToeController {
             if (r   < 2) gc.strokeLine(x, y + cs + 1, x + cs, y + cs + 1);
         }
 
-        // Win line overlay
         if (winLine.length == 3) {
             double[] s = miniCentre(winLine[0], cs);
             double[] e = miniCentre(winLine[2], cs);
@@ -548,131 +799,6 @@ public class TicTacToeController {
     }
 
     private double[] miniCentre(int idx, double cs) {
-        int col = idx % 3;
-        int row = idx / 3;
-        return new double[]{col * (cs + 3) + cs / 2, row * (cs + 3) + cs / 2};
-    }
-
-    // ── Game logic helpers ────────────────────────────────────────────────────
-    private void restartGame() {
-        // Cancel any running draw animations
-        for (int i = 0; i < 9; i++) {
-            if (drawAnims[i] != null) drawAnims[i].stop();
-        }
-
-        game.reset();
-        gameStarted = false;
-
-        // Remove any win-line Lines added to boardWrapper
-        boardWrapper.getChildren().removeIf(n -> n instanceof Line);
-
-        // Rebuild board visuals
-        buildBoard();
-
-        difficultySlider.setDisable(false);
-        updateStatus();
-
-        if (vsAI && humanPlayer == Player.O) scheduleAiMove(900);
-    }
-
-    private void lockDifficultyIfFirstMove() {
-        if (!gameStarted) {
-            gameStarted = true;
-            difficultySlider.setDisable(true);
-        }
-    }
-
-    private void scheduleAiMove(long delayMs) {
-        // Disable all overlays
-        for (Region ov : overlays) { if (ov != null) ov.setMouseTransparent(true); }
-
-        PauseTransition pause = new PauseTransition(Duration.millis(delayMs));
-        pause.setOnFinished(e -> Platform.runLater(() -> {
-            if (game.isGameOver()) return;
-
-            // Re-enable clickable cells
-            for (int i = 0; i < 9; i++) {
-                if (overlays[i] != null) overlays[i].setMouseTransparent(false);
-            }
-
-            Player aiPlayer = (humanPlayer == Player.X) ? Player.O : Player.X;
-            int move = TicTacToeAI.getBestMove(game.getBoard(), aiPlayer, difficulty);
-            if (move == -1) return;
-
-            game.makeMove(move);
-            lockDifficultyIfFirstMove();
-            animateSymbol(move, game.getCell(move), false);
-            updateStatus();
-
-            if (game.isGameOver()) freezeBoard();
-        }));
-        pause.play();
-    }
-
-    private void updateStatus() {
-        switch (game.getGameState()) {
-            case X_WINS -> {
-                String w = resolveWinner(Player.X);
-                setStatus(w + " gewinnt! 🎉", "#4af0c8");
-                scheduleWinEffects();
-                freezeBoard();
-            }
-            case O_WINS -> {
-                String w = resolveWinner(Player.O);
-                setStatus(w + " gewinnt! 🎉", "#f05a7e");
-                scheduleWinEffects();
-                freezeBoard();
-            }
-            case DRAW -> {
-                setStatus("Unentschieden!", "#f5c842");
-                freezeBoard();
-            }
-            case PLAYING -> {
-                Player cur = game.getCurrentPlayer();
-                String txt;
-                if (vsAI) {
-                    txt = (cur == humanPlayer) ? "Du bist dran (" + cur + ")" : "KI denkt… (" + cur + ")";
-                } else {
-                    txt = "Spieler " + cur + " ist an der Reihe";
-                }
-                Color c = (cur == Player.X) ? COLOR_X : COLOR_O;
-                setStatus(txt, toHex(c));
-            }
-        }
-    }
-
-    private void scheduleWinEffects() {
-        // Small delay so the final symbol animation can complete first
-        PauseTransition pt = new PauseTransition(Duration.millis(320));
-        pt.setOnFinished(e -> {
-            int[] wl = game.getWinningLine();
-            if (wl != null) {
-                animateWinLine(wl);
-            }
-        });
-        pt.play();
-    }
-
-    private void freezeBoard() {
-        for (Region ov : overlays) {
-            if (ov != null) ov.setMouseTransparent(true);
-        }
-    }
-
-    private void setStatus(String text, String hexColor) {
-        statusLabel.setText(text);
-        statusLabel.setStyle("-fx-text-fill: " + hexColor + "; -fx-font-size: 26px; -fx-font-weight: bold;");
-    }
-
-    private String resolveWinner(Player w) {
-        if (!vsAI) return "Spieler " + w;
-        return (w == humanPlayer) ? "Du" : "KI";
-    }
-
-    private String toHex(Color c) {
-        return String.format("#%02x%02x%02x",
-                (int)(c.getRed()   * 255),
-                (int)(c.getGreen() * 255),
-                (int)(c.getBlue()  * 255));
+        return new double[]{idx%3*(cs+3)+cs/2, idx/3*(cs+3)+cs/2};
     }
 }

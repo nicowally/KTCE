@@ -3,13 +3,16 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.ColumnConstraints?>
 <?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Pane?>
 <?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.geometry.Insets?>
 
 <BorderPane maxHeight="Infinity" maxWidth="Infinity"
             style="-fx-background-color: #0d0d1a;"
@@ -34,69 +37,95 @@
 
     <!-- ── Centre ──────────────────────────────────────────────────────────── -->
     <center>
-        <VBox alignment="CENTER" spacing="20"
-              style="-fx-padding: 24 40 32 40; -fx-background-color: #0d0d1a;">
+        <!-- StackPane lets the lobby overlay sit on top of the game content -->
+        <StackPane>
 
-            <!-- Status label -->
-            <Label fx:id="statusLabel"
-                   text="Spieler X ist dran"
-                   style="-fx-text-fill: white; -fx-font-size: 26px; -fx-font-weight: bold;" />
+            <!-- ── Game content ── -->
+            <VBox alignment="CENTER" spacing="20"
+                  style="-fx-padding: 24 40 32 40; -fx-background-color: #0d0d1a;">
 
-            <!-- ── AI controls ──────────────────────────────────────────────── -->
-            <HBox fx:id="sideSelectionBox" alignment="CENTER" spacing="16"
-                  visible="false" managed="false">
-                <Button fx:id="playerSideBtn" text="Spieler  X" onAction="#onPlayerSideBtnClick"
-                        style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #4a90d9; -fx-text-fill: white; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;" />
-                <Button fx:id="aiSideBtn" text="KI  O" onAction="#onAiSideBtnClick"
-                        style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #2a2a4a; -fx-text-fill: #8888bb; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;" />
-            </HBox>
+                <Label fx:id="statusLabel"
+                       text="Spieler X ist dran"
+                       style="-fx-text-fill: white; -fx-font-size: 26px; -fx-font-weight: bold;" />
 
-            <VBox fx:id="difficultyBox" alignment="CENTER" spacing="5"
-                  visible="false" managed="false">
-                <Label text="Schwierigkeit"
-                       style="-fx-text-fill: #6666aa; -fx-font-size: 12px;" />
-                <Slider fx:id="difficultySlider" min="0" max="100" value="100"
-                        prefWidth="280"
-                        style="-fx-accent: #4a90d9;" />
-                <Label fx:id="difficultyLabel" text="Unschlagbar"
-                       style="-fx-text-fill: #aaaacc; -fx-font-size: 14px; -fx-font-weight: bold;" />
+                <!-- AI controls (hidden in LAN / local 2-player) -->
+                <HBox fx:id="sideSelectionBox" alignment="CENTER" spacing="16"
+                      visible="false" managed="false">
+                    <Button fx:id="playerSideBtn" text="Spieler  X" onAction="#onPlayerSideBtnClick"
+                            style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #4a90d9; -fx-text-fill: white; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;" />
+                    <Button fx:id="aiSideBtn" text="KI  O" onAction="#onAiSideBtnClick"
+                            style="-fx-font-size: 14px; -fx-font-weight: bold; -fx-background-color: #2a2a4a; -fx-text-fill: #8888bb; -fx-cursor: hand; -fx-background-radius: 8; -fx-padding: 9 22;" />
+                </HBox>
+
+                <VBox fx:id="difficultyBox" alignment="CENTER" spacing="5"
+                      visible="false" managed="false">
+                    <Label text="Schwierigkeit"
+                           style="-fx-text-fill: #6666aa; -fx-font-size: 12px;" />
+                    <Slider fx:id="difficultySlider" min="0" max="100" value="100"
+                            prefWidth="280" style="-fx-accent: #4a90d9;" />
+                    <Label fx:id="difficultyLabel" text="Unschlagbar"
+                           style="-fx-text-fill: #aaaacc; -fx-font-size: 14px; -fx-font-weight: bold;" />
+                </VBox>
+
+                <!-- Board -->
+                <HBox alignment="CENTER">
+                    <Pane fx:id="boardWrapper">
+                        <GridPane fx:id="boardGrid" hgap="0" vgap="0" alignment="CENTER"
+                                  style="-fx-padding: 0;">
+                            <columnConstraints>
+                                <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
+                                <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
+                                <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
+                            </columnConstraints>
+                            <rowConstraints>
+                                <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
+                                <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
+                                <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
+                            </rowConstraints>
+                        </GridPane>
+                    </Pane>
+                </HBox>
+
+                <!-- Bottom buttons -->
+                <HBox alignment="CENTER" spacing="16">
+                    <Button mnemonicParsing="false" onAction="#onRestartClick" text="Neu starten"
+                            style="-fx-font-size: 15px; -fx-padding: 10 28; -fx-background-color: #1e1e3a; -fx-text-fill: #aaaacc; -fx-background-radius: 8; -fx-border-color: #3a3a5c; -fx-border-width: 1; -fx-border-radius: 8; -fx-cursor: hand;" />
+                </HBox>
+
             </VBox>
 
-            <!-- ── Board ────────────────────────────────────────────────────── -->
-            <!--
-                boardGrid lives inside a Pane (fx:id="boardWrapper") so the
-                win-line Line can be added with absolute coordinates matching
-                the grid. A Pane does NOT centre its children like StackPane does.
-            -->
-            <HBox alignment="CENTER">
-                <Pane fx:id="boardWrapper">
-                    <GridPane fx:id="boardGrid"
-                              hgap="0" vgap="0"
-                              alignment="CENTER"
-                              style="-fx-padding: 0;">
-                        <columnConstraints>
-                            <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
-                            <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
-                            <ColumnConstraints minWidth="120" prefWidth="140" maxWidth="180" />
-                        </columnConstraints>
-                        <rowConstraints>
-                            <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
-                            <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
-                            <RowConstraints minHeight="120" prefHeight="140" maxHeight="180" />
-                        </rowConstraints>
-                        <!-- Cells added programmatically in TicTacToeController -->
-                    </GridPane>
-                    <!-- Win-line Line nodes added here at runtime by the controller -->
-                </Pane>
-            </HBox>
+            <!-- ── Lobby overlay (visible only in LAN mode, before connection) ── -->
+            <VBox fx:id="lobbyPane" alignment="CENTER" spacing="20"
+                  visible="false" managed="false"
+                  style="-fx-background-color: #0d0d1a;">
+                <padding><Insets top="60" bottom="60" left="80" right="80"/></padding>
 
-            <!-- ── Bottom buttons ───────────────────────────────────────────── -->
-            <HBox alignment="CENTER" spacing="16">
-                <Button mnemonicParsing="false" onAction="#onRestartClick" text="Neu starten"
-                        style="-fx-font-size: 15px; -fx-padding: 10 28; -fx-background-color: #1e1e3a; -fx-text-fill: #aaaacc; -fx-background-radius: 8; -fx-border-color: #3a3a5c; -fx-border-width: 1; -fx-border-radius: 8; -fx-cursor: hand;" />
-            </HBox>
+                <Label text="LAN-Spiel – Tic-Tac-Toe"
+                       style="-fx-text-fill: white; -fx-font-size: 28px; -fx-font-weight: bold;"/>
 
-        </VBox>
+                <Label text="Host spielt X und macht den ersten Zug."
+                       style="-fx-text-fill: #8888bb; -fx-font-size: 13px;"/>
+
+                <HBox alignment="CENTER" spacing="16">
+                    <Button fx:id="hostBtn" onAction="#onHostClick" text="Spiel hosten"
+                            style="-fx-font-size: 15px; -fx-padding: 12 30; -fx-background-color: #1a4a8a; -fx-text-fill: white; -fx-background-radius: 8; -fx-cursor: hand;"/>
+                    <Button fx:id="joinBtn" onAction="#onJoinClick" text="Spiel beitreten"
+                            style="-fx-font-size: 15px; -fx-padding: 12 30; -fx-background-color: #1e6b1e; -fx-text-fill: white; -fx-background-radius: 8; -fx-cursor: hand;"/>
+                </HBox>
+
+                <HBox fx:id="ipBox" alignment="CENTER" spacing="10" visible="false" managed="false">
+                    <TextField fx:id="ipField" promptText="IP-Adresse des Hosts (z.B. 192.168.1.42)"
+                               style="-fx-background-color: #1e1e3a; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 8 14; -fx-background-radius: 6; -fx-border-color: #3a3a5c; -fx-border-radius: 6; -fx-border-width: 1;"
+                               prefWidth="300"/>
+                    <Button fx:id="connectBtn" onAction="#onConnectClick" text="Verbinden"
+                            style="-fx-font-size: 14px; -fx-padding: 8 20; -fx-background-color: #3a5a9a; -fx-text-fill: white; -fx-background-radius: 6; -fx-cursor: hand;"/>
+                </HBox>
+
+                <Label fx:id="lobbyStatus"
+                       style="-fx-text-fill: #aaaacc; -fx-font-size: 14px;"/>
+            </VBox>
+
+        </StackPane>
     </center>
 
 </BorderPane>

@@ -7,26 +7,18 @@ import java.awt.event.*;
 import java.util.*;
 import java.util.List;
 
-/**
- * Nokia 3310-style Snake – sieht exakt wie das Original aus:
- *  - LCD-grüner Hintergrund (155/188/15)
- *  - Dicker Pixel-Rahmen ums Spielfeld
- *  - Score oben links in Monospace (wie Nokia-Display)
- *  - Schlange = ausgefüllte schwarze Quadrate
- *  - Futter  = kleiner Pixel-Sprite (wie Nokia)
- *  - Kein Anti-Aliasing, reiner Pixel-Look
- */
+
 public class SnakeGame extends JPanel implements ActionListener, KeyListener {
 
     // ── Grid ──────────────────────────────────────────────────────────────────
-    private static final int GRID_WIDTH  = 21;   // Nokia 3310 hatte ~21×16 Zellen
+    private static final int GRID_WIDTH  = 21;
     private static final int GRID_HEIGHT = 16;
-    private static final int GAME_SPEED  = 150;  // ms pro Schritt (Nokia-Tempo)
+    private static final int GAME_SPEED  = 150;
 
     // ── Nokia-LCD-Farben ──────────────────────────────────────────────────────
-    private static final Color LCD_GREEN  = new Color(155, 188,  15);  // Hintergrund
-    private static final Color LCD_DARK   = new Color( 40,  40,  15);  // Pixel-Farbe
-    private static final Color LCD_MID    = new Color( 90, 120,  10);  // leicht heller (Rahmen-Schatten)
+    private static final Color LCD_GREEN  = new Color(155, 188,  15);
+    private static final Color LCD_DARK   = new Color( 40,  40,  15);
+    private static final Color LCD_MID    = new Color( 90, 120,  10);
 
     // ── Spielzustand ──────────────────────────────────────────────────────────
     private final Timer          timer;
@@ -46,7 +38,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
 
     // ── Konstruktor ───────────────────────────────────────────────────────────
     public SnakeGame() {
-        setPreferredSize(new Dimension(480, 400));  // kompaktes Nokia-Display-Feeling
+        setPreferredSize(new Dimension(480, 400));
         setBackground(LCD_GREEN);
         setFocusable(true);
         addKeyListener(this);
@@ -60,7 +52,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     // ── Spielstart ────────────────────────────────────────────────────────────
     private void startGame() {
         snake.clear();
-        // Schlange startet mittig mit 4 Segmenten
+
         int startY = GRID_HEIGHT / 2;
         snake.add(new Point(8, startY));
         snake.add(new Point(7, startY));
@@ -86,8 +78,6 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         food = candidate;
     }
 
-    // ── Kachelgröße: immer ganzzahlig, möglichst groß ────────────────────────
-    /** Berechnet die Kachelgröße passend zur aktuellen Panel-Größe. */
     private int tileSize() {
         int topBarHeight = 28;   // Platz für Score-Zeile
         int padding      = 10;   // Abstand an allen Seiten
@@ -100,7 +90,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     private int boardH()  { return GRID_HEIGHT * tileSize(); }
     private int boardX()  { return (getWidth() - boardW()) / 2; }
     private int boardY()  {
-        // Score-Zeile + kleiner Abstand
+
         return 30;
     }
 
@@ -112,7 +102,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     }
 
     private void updateGame() {
-        // Richtungswechsel (kein 180°-Turn)
+
         if (!isOpposite(direction, nextDirection)) direction = nextDirection;
 
         Point head    = snake.get(0);
@@ -125,13 +115,13 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             case RIGHT -> newHead.x++;
         }
 
-        // Wand-Kollision
+
         if (newHead.x < 0 || newHead.x >= GRID_WIDTH ||
                 newHead.y < 0 || newHead.y >= GRID_HEIGHT) {
             running = false; gameOver = true; return;
         }
 
-        // Selbst-Kollision (nicht gegen letztes Segment, das gleich wegfällt)
+
         boolean ateFood = newHead.equals(food);
         int limit = ateFood ? snake.size() : snake.size() - 1;
         for (int i = 1; i < limit; i++) {
@@ -161,12 +151,12 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // LCD-Hintergrund
+
         g.setColor(LCD_GREEN);
         g.fillRect(0, 0, getWidth(), getHeight());
 
         Graphics2D g2 = (Graphics2D) g;
-        // Kein Anti-Aliasing → echter Pixel-Look
+
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,    RenderingHints.VALUE_ANTIALIAS_OFF);
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
 
@@ -179,7 +169,7 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         if (gameOver)              drawOverlay(g2, "GAME OVER", "R = NEU STARTEN");
     }
 
-    /** Score-Anzeige: Nokia-typisch oben links, Monospace-Font */
+
     private void drawScoreBar(Graphics2D g) {
         g.setColor(LCD_DARK);
         g.setFont(new Font("Monospaced", Font.BOLD, 16));
@@ -188,14 +178,13 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         g.drawString(scoreStr, boardX(), 20);
     }
 
-    /** Dicker Pixel-Rahmen ums Spielfeld – exakt wie Nokia 3310 */
     private void drawBorder(Graphics2D g) {
         int x = boardX();
         int y = boardY();
         int w = boardW();
         int h = boardH();
 
-        // Äußerer Rahmen (2px dick)
+
         g.setColor(LCD_DARK);
         for (int t = 0; t < 2; t++) {
             g.drawRect(x - t, y - t, w + t * 2, h + t * 2);
@@ -205,17 +194,11 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         g.drawRect(x + 1, y + 1, w - 2, h - 2);
     }
 
-    /**
-     * Nokia 3310-Schlange: jedes Segment ist ein kleines ausgefülltes Quadrat,
-     * das zentriert in seiner Zelle sitzt (~60 % der Tile-Größe).
-     * Der Kopf ist etwas größer (~80 %) und hat zwei Augen-Pixel.
-     */
     private void drawSnake(Graphics2D g) {
         int t  = tileSize();
         int bx = boardX();
         int by = boardY();
 
-        // Körper-Segmente: 60 % der Tile, zentriert
         int bodySize   = Math.max(2, (t * 6) / 10);
         int bodyOffset = (t - bodySize) / 2;
 
@@ -227,12 +210,12 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             int py = by + p.y * t;
 
             if (i == 0) {
-                // Kopf: ~80 % der Tile, zentriert
+
                 int headSize   = Math.max(3, (t * 8) / 10);
                 int headOffset = (t - headSize) / 2;
                 g.fillRect(px + headOffset, py + headOffset, headSize, headSize);
 
-                // Augen: 2 kleine Pixel-Dots, je nach Richtung positioniert
+
                 int eyeSize = Math.max(1, t / 8);
                 drawHeadEyes(g, px, py, t, eyeSize);
             } else {
@@ -241,13 +224,10 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         }
     }
 
-    /**
-     * Zeichnet zwei Augen-Pixel auf den Kopf, ausgerichtet nach der Bewegungsrichtung.
-     */
     private void drawHeadEyes(Graphics2D g, int px, int py, int t, int es) {
         int mid  = t / 2;
-        int near = t / 5;          // Abstand von der Vorderkante
-        int side = t / 3;          // seitlicher Abstand zur Mitte
+        int near = t / 5;
+        int side = t / 3;
 
         int e1x, e1y, e2x, e2y;
         switch (direction) {
@@ -257,18 +237,13 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
             default    -> { e1x = px + mid - side;     e1y = py + t - near - es;  e2x = px + mid + side - es; e2y = e1y; }
         }
 
-        // Augen werden in LCD_GREEN gezeichnet (heller Kontrast auf dunklem Kopf)
+
         g.setColor(LCD_GREEN);
         g.fillRect(e1x, e1y, es, es);
         g.fillRect(e2x, e2y, es, es);
         g.setColor(LCD_DARK);
     }
 
-    /**
-     * Futter-Sprite im Nokia-Stil:
-     * Bei kleinen Tiles: einfacher Punkt.
-     * Bei größeren Tiles: der klassische kleine "Apfel"-Pixel-Sprite.
-     */
     private void drawFood(Graphics2D g) {
         int t  = tileSize();
         int bx = boardX();
@@ -279,18 +254,17 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         g.setColor(LCD_DARK);
 
         if (t <= 8) {
-            // Sehr kleine Tiles: nur ein Pixel-Punkt
+
             int b = Math.max(2, t / 2);
             g.fillRect(fx + t / 2 - b / 2, fy + t / 2 - b / 2, b, b);
         } else {
-            // Nokia-typischer Futter-Sprite (Äpfelchen):
-            // Pixel-Koordinaten relativ zum 6×6-Raster innerhalb der Tile
+
             int b = t / 6;  // Block-Einheit
-            // Stiel
+
             g.fillRect(fx + 3 * b, fy + 0 * b, b, b);
-            // Blatt
+
             g.fillRect(fx + 4 * b, fy + 0 * b, b, b);
-            // Apfelkörper
+
             g.fillRect(fx + 2 * b, fy + 1 * b, b, b);
             g.fillRect(fx + 3 * b, fy + 1 * b, b, b);
             g.fillRect(fx + 4 * b, fy + 1 * b, b, b);
@@ -303,29 +277,25 @@ public class SnakeGame extends JPanel implements ActionListener, KeyListener {
         }
     }
 
-    /** Pause / Game-Over Overlay im Nokia-Stil */
+
     private void drawOverlay(Graphics2D g, String title, String subtitle) {
         int bx = boardX();
         int by = boardY();
         int bw = boardW();
         int bh = boardH();
 
-        // Box zentriert im Spielfeld
         int boxW = Math.min(200, bw - 20);
         int boxH = 60;
         int boxX = bx + (bw - boxW) / 2;
         int boxY = by + (bh - boxH) / 2;
 
-        // LCD-Hintergrund der Box (wirkt wie "ausgebleicht")
         g.setColor(LCD_GREEN);
         g.fillRect(boxX, boxY, boxW, boxH);
 
-        // Rahmen
         g.setColor(LCD_DARK);
         g.drawRect(boxX,     boxY,     boxW,     boxH);
         g.drawRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
 
-        // Text
         g.setFont(new Font("Monospaced", Font.BOLD, 14));
         FontMetrics fm = g.getFontMetrics();
         g.drawString(title,    boxX + (boxW - fm.stringWidth(title))    / 2, boxY + 22);

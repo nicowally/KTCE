@@ -56,7 +56,7 @@ public class Snakeserver {
     private volatile boolean ready = false;  // true sobald ServerSocket lauscht
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
         Thread t = new Thread(r, "SnakeServerLoop");
-        t.setDaemon(true);  // Wird automatisch beendet wenn JVM endet
+        t.setDaemon(true);
         return t;
     });
 
@@ -92,7 +92,7 @@ public class Snakeserver {
         serverSocket = new ServerSocket();
         serverSocket.setReuseAddress(true);  // Port sofort wiederverwendbar nach Schließen
         serverSocket.bind(new java.net.InetSocketAddress(port));
-        ready = true;  // Ab jetzt kann der Host-Client sich verbinden
+        ready = true;
 
         // Shutdown-Hook: ServerSocket beim Programmende automatisch schließen
         // damit der Port nicht belegt bleibt
@@ -104,32 +104,26 @@ public class Snakeserver {
         System.out.println("[Server] Lauscht auf Port " + port);
         System.out.println("[Server] Warte auf 2 Spieler...");
 
-        // Spieler 1
         Socket s1 = serverSocket.accept();
         System.out.println("[Server] Spieler 1 verbunden: " + s1.getInetAddress());
         handler1 = new ClientHandler(s1, 1);
         handler1.send("WAITING");
 
-        // Spieler 2
         Socket s2 = serverSocket.accept();
         System.out.println("[Server] Spieler 2 verbunden: " + s2.getInetAddress());
         handler2 = new ClientHandler(s2, 2);
 
-        // Farben austauschen
         handler1.send("COLORINFO:" + p1ColorIndex + ":" + p2ColorIndex);
         handler2.send("COLORINFO:" + p2ColorIndex + ":" + p1ColorIndex);
 
-        // Lese-Threads starten
         new Thread(handler1::readLoop).start();
         new Thread(handler2::readLoop).start();
 
-        // Spiel initialisieren und starten
         initGame();
         phase = GamePhase.RUNNING;
         handler1.send("START:" + p1ColorIndex + ":" + p2ColorIndex);
         handler2.send("START:" + p2ColorIndex + ":" + p1ColorIndex);
 
-        // Game-Loop starten
         scheduler.scheduleAtFixedRate(this::gameTick, 0, FRAME_DELAY_MS, TimeUnit.MILLISECONDS);
     }
 
@@ -162,7 +156,7 @@ public class Snakeserver {
         tickEffects(now);
 
         boolean moved1 = false, moved2 = false;
-        // Eingefrorene Schlange wird komplett übersprungen (bewegt sich nicht)
+
         if (!freeze1 && now - lastMove1 >= moveDelay1) { moveSnake(1); lastMove1 = now; moved1 = true; }
         if (!freeze2 && now - lastMove2 >= moveDelay2) { moveSnake(2); lastMove2 = now; moved2 = true; }
 
@@ -206,7 +200,6 @@ public class Snakeserver {
             ny = (ny + GRID_H) % GRID_H;
         }
 
-        // Selbstkollision
         if (!shield) {
             List<int[]> otherSnake = player == 1 ? snake2 : snake1;
             for (int i = 0; i < snake.size(); i++) {
@@ -215,7 +208,7 @@ public class Snakeserver {
                     triggerGameOver(player == 1 ? 2 : 1, "Selbst"); return;
                 }
             }
-            // Kollision mit anderer Schlange
+
             for (int[] seg : otherSnake) {
                 if (seg[0] == nx && seg[1] == ny) {
                     triggerGameOver(player == 1 ? 2 : 1, "Andere Schlange"); return;
@@ -223,7 +216,7 @@ public class Snakeserver {
             }
         }
 
-        // Kopf-zu-Kopf
+
         List<int[]> other = player == 1 ? snake2 : snake1;
         if (!other.isEmpty() && other.get(0)[0] == nx && other.get(0)[1] == ny) {
             triggerGameOver(0, "Kopf-zu-Kopf"); return;
@@ -231,7 +224,6 @@ public class Snakeserver {
 
         boolean grow = isFood(nx, ny);
 
-        // Schlange bewegen
         int[] newHead = {nx, ny};
         snake.add(0, newHead);
         if (!grow) snake.remove(snake.size() - 1);
@@ -241,7 +233,7 @@ public class Snakeserver {
             else              { score2++; applyFruitEffect(2, currentFruit); }
 
             if (currentFruit == FruitType.ROTTEN_MEAT) {
-                // Shrink statt wachsen
+
                 for (int i = 0; i < 3 && snake.size() > 3; i++) snake.remove(snake.size()-1);
                 if (player == 1) score1 = Math.max(0, score1 - 3);
                 else             score2 = Math.max(0, score2 - 3);
@@ -409,37 +401,36 @@ public class Snakeserver {
                 if (phase == GamePhase.GAME_OVER) {
                     if (playerId == 1) {
                         host1ReadyForRestart = true;
-                        // Host sendet RESTART → Settings-Phase für beide öffnen
-                        // Beitreter bekommt RESTART_LOBBY damit er Farbe wählen kann
+
                         handler2.send("RESTART_LOBBY");
                         send("RESTART_LOBBY_HOST");
                     } else {
                         guest2ReadyForRestart = true;
                     }
-                    // Wenn beide bereit → starten
+
                     if (host1ReadyForRestart && guest2ReadyForRestart) {
                         restartGame();
                     }
                 }
             } else if (msg.equals("RESTART_CONFIRM")) {
-                // Beitreter bestätigt dass er bereit ist (nach Farbwahl)
+
                 if (phase == GamePhase.GAME_OVER && playerId == 2) {
                     guest2ReadyForRestart = true;
                     if (host1ReadyForRestart) restartGame();
                     else handler2.send("WAITING_FOR_HOST");
                 }
             } else if (msg.startsWith("COLOR:")) {
-                // Spieler wählt Farbe vor dem Start
+
                 try {
                     int ci = Integer.parseInt(msg.substring(6).trim());
                     if (playerId == 1) p1ColorIndex = ci;
                     else               p2ColorIndex = ci;
                 } catch (NumberFormatException ignored) {}
             } else if (msg.startsWith("CHAOS:")) {
-                // Nur der Host (Spieler 1) darf den Chaos-Modus ändern
+
                 if (playerId == 1) {
                     chaosMode = msg.substring(6).trim().equals("1");
-                    // Beitreter informieren damit er es live sieht
+
                     broadcast("CHAOSINFO:" + (chaosMode ? "1" : "0"));
                 }
             }

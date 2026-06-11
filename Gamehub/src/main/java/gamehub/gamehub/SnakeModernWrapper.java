@@ -17,7 +17,7 @@ import java.io.IOException;
 
 public class SnakeModernWrapper {
 
-    // Letzte Server-Instanz merken damit sie beim erneuten Hosten sauber gestoppt wird
+
     private static gamehub.games.snake_new.Snakeserver runningServer = null;
 
     public static BorderPane createSnakePane() {
@@ -31,7 +31,7 @@ public class SnakeModernWrapper {
                         "-fx-background-radius: 8; -fx-cursor: hand;"
         );
         backButton.setOnAction(e -> {
-            // Server stoppen wenn man zurück geht
+
             if (runningServer != null) {
                 runningServer.stop();
                 runningServer = null;
@@ -51,7 +51,7 @@ public class SnakeModernWrapper {
         topBar.setStyle("-fx-background-color: #111118;");
         root.setTop(topBar);
 
-        // Zeige zuerst das Lobby-Menü
+
         showLobby(root);
 
         return root;
@@ -139,7 +139,7 @@ public class SnakeModernWrapper {
         title.setFont(Font.font("SansSerif", FontWeight.BOLD, 28));
         title.setTextFill(Color.web("#4488ff"));
 
-        // IP-Anzeige
+
         String localIp = getLocalIp();
         Label ipLabel = new Label("Deine IP:  " + localIp);
         ipLabel.setFont(Font.font("SansSerif", FontWeight.BOLD, 17));
@@ -172,21 +172,18 @@ public class SnakeModernWrapper {
             statusLabel.setText("Starte Server auf Port 54321 ...");
             new Thread(() -> {
                 try {
-                    // Windows-Firewall-Regel automatisch hinzufügen (einmalig, braucht Admin-Rechte)
+
                     tryAddFirewallRule();
 
-                    // Alten Server sauber beenden falls noch einer läuft
+
                     if (runningServer != null) {
                         runningServer.stop();
                         runningServer = null;
                         Thread.sleep(300);
                     }
 
-                    // Auf Windows: Prozess der Port 54321 belegt automatisch beenden
                     forceReleasePort(gamehub.games.snake_new.Snakeserver.DEFAULT_PORT);
 
-                    // Server in Hintergrund-Thread starten
-                    // Wir nutzen ein Flag das der Server setzt sobald der ServerSocket offen ist
                     gamehub.games.snake_new.Snakeserver server =
                             new gamehub.games.snake_new.Snakeserver();
                     runningServer = server;
@@ -196,11 +193,9 @@ public class SnakeModernWrapper {
                             Platform.runLater(() -> statusLabel.setText("Server-Fehler: " + ex.getMessage()));
                         }
                     }, "SnakeServer");
-                    serverThread.setDaemon(true);  // Automatisch beenden wenn Programm endet
+                    serverThread.setDaemon(true);
                     serverThread.start();
 
-                    // Warten bis der Server sein isReady-Flag gesetzt hat (max 5 Sekunden)
-                    // WICHTIG: Kein Test-Socket! Der würde als Spieler 1 gezählt werden.
                     int waited = 0;
                     while (!server.isReady() && waited < 5000) {
                         Thread.sleep(50);
@@ -216,7 +211,6 @@ public class SnakeModernWrapper {
 
                     Platform.runLater(() -> statusLabel.setText("Server läuft! Verbinde als Spieler 1..."));
 
-                    // Als Client verbinden
                     Platform.runLater(() -> startMultiplayerClient(root, "localhost", 1));
 
                 } catch (Exception ex) {
@@ -292,21 +286,12 @@ public class SnakeModernWrapper {
     }
 
     // ── Helper ────────────────────────────────────────────────────────────────
-    /**
-     * Versucht eine Windows-Firewall-Regel für Port 54321 hinzuzufügen.
-     * Schlägt still fehl wenn keine Admin-Rechte vorhanden sind oder kein Windows-System.
-     * Auf Linux/Mac ist keine Aktion nötig (Ports sind standardmäßig offen).
-     */
-    /**
-     * Findet auf Windows den Prozess der den angegebenen Port belegt und beendet ihn.
-     * Verhindert "Address already in use" beim erneuten Server-Start.
-     */
     private static void forceReleasePort(int port) {
         try {
             String os = System.getProperty("os.name", "").toLowerCase();
             if (!os.contains("win")) return;
 
-            // Eigene PID ermitteln damit wir uns nicht selbst killen
+
             long ownPid = ProcessHandle.current().pid();
 
             Process netstat = Runtime.getRuntime().exec(
@@ -324,7 +309,7 @@ public class SnakeModernWrapper {
                 if (parts.length > 0) {
                     String pid = parts[parts.length - 1];
                     if (pid.matches("\\d+") && !pid.equals("0")) {
-                        // WICHTIG: eigene PID niemals killen
+
                         if (Long.parseLong(pid) != ownPid) {
                             pids.add(pid);
                         } else {
@@ -348,16 +333,16 @@ public class SnakeModernWrapper {
 
     private static void tryAddFirewallRule() {
         String os = System.getProperty("os.name", "").toLowerCase();
-        if (!os.contains("win")) return; // Nur auf Windows nötig
+        if (!os.contains("win")) return;
         try {
-            // Prüfen ob Regel schon existiert
+
             Process check = Runtime.getRuntime().exec(new String[]{
                     "netsh", "advfirewall", "firewall", "show", "rule", "name=SnakeMultiplayer"
             });
             check.waitFor();
-            if (check.exitValue() == 0) return; // Regel existiert bereits
+            if (check.exitValue() == 0) return;
 
-            // Neue Regel hinzufügen
+
             Runtime.getRuntime().exec(new String[]{
                     "netsh", "advfirewall", "firewall", "add", "rule",
                     "name=SnakeMultiplayer",
@@ -378,7 +363,7 @@ public class SnakeModernWrapper {
             java.net.InetAddress addr = java.net.InetAddress.getLocalHost();
             return addr.getHostAddress();
         } catch (Exception e) {
-            // Fallback: alle Netzwerk-Interfaces durchsuchen
+
             try {
                 java.util.Enumeration<java.net.NetworkInterface> ifaces =
                         java.net.NetworkInterface.getNetworkInterfaces();

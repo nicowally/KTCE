@@ -111,16 +111,12 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     }
 
     // ===== Multiplayer Connect =====
-    /**
-     * Verbindet zum SnakeServer und schaltet in den Multiplayer-Modus.
-     * Muss aus dem EDT (oder einem eigenen Thread) aufgerufen werden.
-     */
+
     public void connectToServer(String host, int port) {
         multiplayerMode = true;
         // Nur der Host (playerId==1) darf Chaos-Modus wählen
         settingsPanel.setCanChangeChaos(myPlayerId == 1);
         // SettingsPanel bleibt sichtbar während der Wartezeit, damit Farbe & Chaos gewählt werden können.
-        // Es wird erst versteckt wenn START vom Server kommt.
         settingsPanel.setVisible(true);
         mpState = MpState.CONNECTING;
         mpStatusMsg = "Verbinde mit " + host + ":" + port + " ...";
@@ -131,7 +127,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
                 mpSocket = new Socket(host, port);
                 mpOut = new PrintWriter(new OutputStreamWriter(mpSocket.getOutputStream()), true);
                 mpIn  = new BufferedReader(new InputStreamReader(mpSocket.getInputStream()));
-                // Sofort als WAITING markieren sobald TCP-Verbindung steht
+
                 SwingUtilities.invokeLater(() -> {
                     mpState = MpState.WAITING;
                     mpStatusMsg = "Verbunden! Warte auf zweiten Spieler...";
@@ -173,7 +169,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             mpOtherColor = Integer.parseInt(p[1]);
             selectedColorIndex = mpMyColor;
             settingsPanel.setPreviewColorIndex(mpMyColor);
-            // Eigene Farb- und Chaos-Einstellungen sofort an den Server melden
+
             if (mpOut != null) {
                 mpOut.println("COLOR:" + mpMyColor);
                 mpOut.println("CHAOS:" + (settingsPanel.isChaosMode() ? "1" : "0"));
@@ -185,27 +181,27 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             selectedColorIndex = mpMyColor;
             mpState = MpState.PLAYING;
             mpWinner = "";
-            // Jetzt erst das SettingsPanel wegblenden - der Spieler hatte Zeit zum Wählen
+
             settingsPanel.setVisible(false);
         } else if (msg.startsWith("STATE:")) {
             parseState(msg.substring(6));
         } else if (msg.startsWith("GAMEOVER:")) {
             mpWinner = msg.substring(9);
             mpState = MpState.GAME_OVER;
-            // Settings wieder anzeigen: Host darf Farbe+Chaos, Beitreter nur Farbe
+
             settingsPanel.setCanChangeChaos(myPlayerId == 1);
             settingsPanel.setVisible(true);
         } else if (msg.equals("WAITING_RESTART")) {
             mpState = MpState.WAITING_RESTART;
             mpStatusMsg = "Warte auf anderen Spieler für Neustart...";
         } else if (msg.equals("RESTART_LOBBY_HOST")) {
-            // Host: Settings anzeigen, kann Farbe+Chaos wählen, dann R drücken zum Bestätigen
+
             mpState = MpState.GAME_OVER;
             mpStatusMsg = "Einstellungen wählen, dann R für Neustart";
             settingsPanel.setCanChangeChaos(true);
             settingsPanel.setVisible(true);
         } else if (msg.equals("RESTART_LOBBY")) {
-            // Beitreter: nur Farbe wählen, dann R drücken
+
             mpState = MpState.GAME_OVER;
             mpStatusMsg = "Farbe wählen, dann R zum Bestätigen";
             settingsPanel.setCanChangeChaos(false);
@@ -214,7 +210,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
             mpStatusMsg = "Warte auf Host...";
             repaint();
         } else if (msg.startsWith("CHAOSINFO:")) {
-            // Vom Host gesendeter Chaos-Wert – SettingsPanel live aktualisieren
+
             boolean chaos = msg.substring(10).trim().equals("1");
             settingsPanel.setChaosMode(chaos);
             this.chaosMode = chaos;
@@ -245,14 +241,14 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     }
 
     private String extractField(String json, String key) {
-        // Findet "key": VALUE bis zum nächsten Komma/} (für Zahlen und Arrays)
+
         String search = "\"" + key + "\":";
         int si = json.indexOf(search);
         if (si < 0) return "";
         int vi = si + search.length();
         char first = json.charAt(vi);
         if (first == '[') {
-            // Finde passendes ]
+
             int depth = 0, ei = vi;
             while (ei < json.length()) {
                 char c = json.charAt(ei);
@@ -281,7 +277,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         if (arr.isEmpty() || arr.equals("[]")) return list;
         String inner = arr.substring(1, arr.length()-1).trim();
         if (inner.isEmpty()) return list;
-        // Finde alle [x,y]
+
         int i = 0;
         while (i < inner.length()) {
             int start = inner.indexOf('[', i);
@@ -513,7 +509,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         }
 
         g2.dispose();
-        // Settings Panel layout immer aktualisieren (Single + MP Wartezeit)
+
         layoutSettingsPanel();
     }
 
@@ -521,30 +517,28 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     private void paintMultiplayer(Graphics2D g2, double time) {
         switch (mpState) {
             case CONNECTING, WAITING -> {
-                // SettingsPanel ist sichtbar → nur kleinen Status-Banner unten zeigen
+
                 drawMpStatusBanner(g2);
             }
             case PLAYING             -> drawMpGame(g2, time);
             case WAITING_RESTART     -> {
                 drawMpGame(g2, time);
-                drawMpWaitScreen(g2); // kleines Overlay über dem letzten Spielstand
+                drawMpWaitScreen(g2);
             }
             case GAME_OVER           -> { drawMpGame(g2, time); drawMpGameOver(g2); }
         }
     }
 
-    /** Kleiner Status-Banner am unteren Rand des Spielfelds während der Wartezeit. */
     private void drawMpStatusBanner(Graphics2D g2) {
         int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
-        // Spielfeld-Hintergrund trotzdem zeichnen damit die Cards seitlich sichtbar sind
-        // Banner unten im Spielfeld
+
         int bannerH = 42;
         g2.setColor(new Color(0,0,0,170));
         g2.fillRoundRect(bx+20, by+bh-bannerH-12, bw-40, bannerH, 14, 14);
         g2.setColor(new Color(130,220,130)); g2.setFont(new Font("SansSerif",Font.BOLD,14));
         FontMetrics fm=g2.getFontMetrics();
         g2.drawString(mpStatusMsg, bx+(bw-fm.stringWidth(mpStatusMsg))/2, by+bh-bannerH+14);
-        // Pulsierender Punkt
+
         double pulse = 0.5+0.5*Math.sin(System.currentTimeMillis()/350.0);
         g2.setColor(new Color(100,255,100,(int)(120+100*pulse)));
         g2.fillOval(bx+bw/2-fm.stringWidth(mpStatusMsg)/2-16, by+bh-bannerH+5, 10, 10);
@@ -563,7 +557,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g2.setFont(new Font("SansSerif",Font.PLAIN,13)); fm=g2.getFontMetrics();
         g2.setColor(new Color(180,240,180));
         g2.drawString(mpStatusMsg, bx+(bw-fm.stringWidth(mpStatusMsg))/2, boxY+78);
-        // Pulsierender Rand
+
         double pulse = 0.5+0.5*Math.sin(System.currentTimeMillis()/400.0);
         g2.setColor(new Color(100,200,100,(int)(60+80*pulse)));
         g2.setStroke(new BasicStroke(2f));
@@ -574,18 +568,16 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         // Futter
         drawFoodMp(g2, time);
 
-        // Beide Schlangen aus Serverdaten
+
         boolean iAm1 = myPlayerId == 1;
         List<int[]> mySegs    = iAm1 ? mpSnake1 : mpSnake2;
         List<int[]> otherSegs = iAm1 ? mpSnake2 : mpSnake1;
         int myColor    = mpMyColor;
         int otherColor = mpOtherColor;
 
-        // Andere Schlange zuerst (damit meine oben liegt)
         drawNetSnake(g2, otherSegs, SNAKE_COLORS[otherColor], time, false);
         drawNetSnake(g2, mySegs,    SNAKE_COLORS[myColor],    time, true);
 
-        // HUD
         drawMpHud(g2);
     }
 
@@ -622,7 +614,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g2.setStroke(new BasicStroke(Math.max(4f,t*0.5f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
         g2.draw(path);
 
-        // Mein Spieler – leichter Glow
         if (isMe) {
             g2.setColor(new Color(col.inner.getRed(), col.inner.getGreen(), col.inner.getBlue(), 40));
             g2.setStroke(new BasicStroke(Math.max(12f,t*1.2f),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
@@ -715,10 +706,8 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g2.setColor(Color.WHITE);
         g2.drawString(p2Str, bx+bw-p2w, by+8+hudH/2+6);
 
-        // Effekte eigener Spieler
         drawMpEffects(g2);
 
-        // Steuerhinweis
         g2.setFont(new Font("SansSerif",Font.PLAIN,Math.max(11,t*2/3)));
         g2.setColor(new Color(255,255,255,130));
         g2.drawString("WASD / Pfeiltasten steuern",bx+12,by+getBoardHeight()-8);
@@ -782,7 +771,7 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
 
     private void layoutSettingsPanel() {
         int boardY=getOffsetY(), boardH=getBoardHeight(), sideW=getOffsetX();
-        // Karten immer anzeigen, auch wenn wenig Seitenplatz vorhanden ist
+
         if (sideW < 30) return;
         int pw=getWidth(), ph=boardH;
         if (settingsPanel.getBounds().width!=pw || settingsPanel.getBounds().height!=ph
@@ -819,7 +808,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g2.drawRoundRect(boxX, boxY, boxW, boxH, 28, 28);
     }
 
-    // ── Hintergrund ──────────────────────────────────────────────────────────
     private void drawBackground(Graphics2D g2, double time) {
         g2.setColor(new Color(30,30,40)); g2.fillRect(0,0,getWidth(),getHeight());
         int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
@@ -847,7 +835,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
     }
     private int pseudo(int s) { return Math.abs(s*1103515245+12345); }
 
-    // ── Snake Single-Player Rendering (unverändert) ──────────────────────────
     private void drawSnakeWrapped(Graphics2D g2, float progress, double time) {
         int bx=getOffsetX(), by=getOffsetY(), bw=getBoardWidth(), bh=getBoardHeight();
         Shape oldClip = g2.getClip(); g2.setClip(bx, by, bw, bh);
@@ -1052,7 +1039,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g2.drawString(hint, bx+(bw-fm.stringWidth(hint))/2, boxY+106);
     }
 
-    // ── Effekt-Overlays Single-Player ─────────────────────────────────────────
     private void drawEffectOverlays(Graphics2D g2) {
         long now=System.currentTimeMillis();
         int x=getOffsetX(), y=getOffsetY()+getBoardHeight()+6;
@@ -1072,7 +1058,6 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         g2.drawString(lbl, x+(w-fm.stringWidth(lbl))/2, y+h-3);
     }
 
-    // ── Futter Single-Player ──────────────────────────────────────────────────
     private void drawFood(Graphics2D g2, double time) {
         if (foodGrid == null) return;
         int t=getTileSize(), bx=getOffsetX(), by=getOffsetY();
@@ -1230,10 +1215,8 @@ public class SnakeGameNew extends JPanel implements ActionListener, KeyListener 
         repaint();
     }
 
-    /** Setzt Multiplayer-Spieler-ID (1 oder 2) – wird vom Wrapper gesetzt. */
     public void setMyPlayerId(int id) { this.myPlayerId = id; }
 
-    /** Wird vom SettingsPanel aufgerufen wenn Chaos-Modus geändert wird. */
     public void onChaosChanged(boolean chaos) {
         this.chaosMode = chaos;
         // Im Multiplayer live an Server melden (nur Host hat Wirkung)
@@ -1264,7 +1247,7 @@ class SettingsPanel extends JPanel {
     private final SnakeGameNew game;
     private int     previewColorIndex = 0;
     private boolean chaosMode         = false;
-    /** true = Einzelspieler oder Host → darf Chaos ändern. false = Beitreter → nur lesen. */
+
     private boolean canChangeChaos    = true;
 
     private static final int CARD_W  = 170;
@@ -1285,7 +1268,6 @@ class SettingsPanel extends JPanel {
     public void setCanChangeChaos(boolean v) { canChangeChaos = v; repaint(); }
     public void setChaosMode(boolean v) { chaosMode = v; repaint(); }
 
-    /** Setzt den Farbvorschau-Index von außen (z.B. bei COLORINFO vom Server). */
     public void setPreviewColorIndex(int idx) {
         previewColorIndex = idx;
         repaint();
@@ -1315,24 +1297,24 @@ class SettingsPanel extends JPanel {
     private Rectangle getLeftCardBounds() {
         int bx=getBoardX();
         if (bx >= CARD_W+PADDING*2) {
-            // Genug Platz seitlich links
+
             return new Rectangle((bx-CARD_W)/2, (getHeight()-CARD_H)/2, CARD_W, CARD_H);
         }
-        // Fallback: kleine Karte links über dem Spielfeld eingeblendet
+
         int cw = Math.min(CARD_W, Math.max(120, bx-8));
-        if (cw < 80) return null; // wirklich kein Platz
+        if (cw < 80) return null;
         return new Rectangle(4, (getHeight()-CARD_H)/2, cw, CARD_H);
     }
 
     private Rectangle getRightCardBounds() {
         int bx=getBoardX(), bw=getBoardWidth(), ra=getWidth()-bx-bw;
         if (ra >= CARD_W+PADDING*2) {
-            // Genug Platz seitlich rechts
+
             return new Rectangle(bx+bw+(ra-CARD_W)/2, (getHeight()-CARD_H)/2, CARD_W, CARD_H);
         }
-        // Fallback: kleine Karte rechts über dem Spielfeld eingeblendet
+
         int cw = Math.min(CARD_W, Math.max(120, ra-8));
-        if (cw < 80) return null; // wirklich kein Platz
+        if (cw < 80) return null;
         return new Rectangle(getWidth()-cw-4, (getHeight()-CARD_H)/2, cw, CARD_H);
     }
     private int getBoardX() {
@@ -1417,10 +1399,10 @@ class SettingsPanel extends JPanel {
             String hint="Gilt ab nächstem Start"; fm=g2.getFontMetrics();
             g2.drawString(hint, r.x+(r.width-fm.stringWidth(hint))/2, r.y+r.height-10);
         } else {
-            // Beitreter: Buttons ausgegraut, Hinweis
+
             drawModeButton(g2, r.x+12, r.y+90,  r.width-24, 36, "Normal", !chaosMode, new Color(50,160,80));
             drawModeButton(g2, r.x+12, r.y+134, r.width-24, 36, "Chaos",   chaosMode, new Color(160,50,200));
-            // Halbtransparentes Overlay über die Buttons
+
             g2.setColor(new Color(20,24,32,140));
             g2.fillRoundRect(r.x+12, r.y+90, r.width-24, 80, 10, 10);
             g2.setFont(new Font("SansSerif",Font.BOLD,9)); g2.setColor(new Color(180,160,255));
